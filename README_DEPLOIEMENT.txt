@@ -124,3 +124,13 @@ formulaire, intitulés, aides, messages d'erreur, validation, espace administrat
 statistiques, export et récapitulatif des réponses. Le nom officiel « Plateforme
 Observatoire du végétal chimie et métabolisme » reste volontairement en français.
 Le modèle Word officiel conserve son texte d'origine.
+
+
+NOM DU DOCUMENT WORD (version 1.3.9)
+------------------------------------
+Le document Word généré porte désormais le nom :
+E-GES-01-Date-Heure-ProjectManager-Labo.docx
+
+La date et l'heure correspondent à l'instant de génération (format AAAAMMJJ-HHMMSS).
+Le nom du responsable de projet et le groupe/laboratoire sont ajoutés à la fin.
+Les caractères spéciaux sont remplacés par des tirets pour garantir un nom de fichier compatible.

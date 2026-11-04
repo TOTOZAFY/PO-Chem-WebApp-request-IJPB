@@ -383,8 +383,15 @@ def build_document(form_data):
     guidance_cell = table.cell(7, 0)
     add_to_existing_paragraph(guidance_cell.paragraphs[0], f"{t('answer_prefix')} {form_data.get('guidance', 'NO')}", bold=True)
 
-    ref_name = re.sub(r"[^A-Za-z0-9]+", "_", form_data.get("project_manager", "NOM")).strip("_").upper() or "NOM"
-    reference = f"E-GES-01_{date.today().strftime('%d%m%y')}_{ref_name}"
+    # Filename format: E-GES-01-Date-Heure-ProjectManager-Lab.docx
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+    manager_name = re.sub(
+        r"[^A-Za-z0-9]+", "-", form_data.get("project_manager", "NOM")
+    ).strip("-") or "NOM"
+    lab_name = re.sub(
+        r"[^A-Za-z0-9]+", "-", form_data.get("group", "LABO")
+    ).strip("-") or "LABO"
+    reference = f"E-GES-01-{timestamp}-{manager_name}-{lab_name}"
     for row in doc.tables[0].rows:
         for cell in row.cells:
             for paragraph in cell.paragraphs:
