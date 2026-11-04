@@ -22,10 +22,10 @@ st.set_page_config(
 
 APP_NAME = "PO-Chem-WebApp-Request"
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template_E-GES-01.docx")
-ADMIN_EMAIL = "ov-chimie@inrae.fr"
 CLOUD_FOLDER = "MyDrive/E-GES-01/Demandes_Word"
 METADATA_PATH = "MyDrive/E-GES-01/demandes_metadata.json"
-
+NOTIFICATION_SETTINGS_PATH = "MyDrive/E-GES-01/notification_settings.json"
+DEFAULT_
 TRANSLATIONS = {
     "fr": {
         "language": "Langue / Language", "form": "Formulaire de demande",
@@ -65,6 +65,11 @@ TRANSLATIONS = {
         "pending": "En attente", "accepted": "Acceptées", "refused": "Refusées",
         "by_status": "Répartition par statut", "by_month": "Demandes par mois",
         "request_list": "Gestion des demandes", "no_requests": "Aucune demande enregistrée.",
+        "notification_settings": "Configuration des notifications e-mail",
+        "admin_primary_email": "E-mail principal de l’administrateur",
+        "admin_secondary_email": "E-mail secondaire de l’administrateur (CC, facultatif)",
+        "save_notification_settings": "Enregistrer les adresses e-mail",
+        "notification_settings_saved": "Adresses de notification enregistrées dans Nextcloud.",
         "select_request": "Sélectionner une demande", "status": "Décision / statut",
         "comment": "Commentaire facultatif", "save_decision": "Enregistrer la décision et notifier le demandeur",
         "decision_saved": "Décision enregistrée et notification envoyée au demandeur.",
@@ -118,6 +123,11 @@ TRANSLATIONS = {
         "pending": "Pending", "accepted": "Accepted", "refused": "Rejected",
         "by_status": "Requests by status", "by_month": "Requests per month",
         "request_list": "Request management", "no_requests": "No requests have been recorded.",
+        "notification_settings": "Email notification settings",
+        "admin_primary_email": "Administrator primary email",
+        "admin_secondary_email": "Administrator secondary email (CC, optional)",
+        "save_notification_settings": "Save email addresses",
+        "notification_settings_saved": "Notification addresses saved to Nextcloud.",
         "select_request": "Select a request", "status": "Decision / status",
         "comment": "Optional comment", "save_decision": "Save decision and notify requester",
         "decision_saved": "Decision saved and requester notified.",
@@ -196,6 +206,44 @@ def save_metadata(records):
         timeout=30,
     )
     response.raise_for_status()
+
+
+def load_notification_settings():
+    """Load editable notification recipients from Nextcloud."""
+    response = webdav_request("GET", NOTIFICATION_SETTINGS_PATH)
+    if response.status_code == 404:
+        return {
+            "admin_email": DEFAULT_ADMIN_EMAIL,
+            "admin_cc_email": "",
+        }
+    response.raise_for_status()
+    settings = response.json()
+    if not isinstance(settings, dict):
+        raise RuntimeError("Le fichier de configuration des notifications est invalide.")
+    return {
+        "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
+        "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
+    }
+
+
+def save_notification_settings(settings):
+    response = webdav_request(
+        "PUT", NOTIFICATION_SETTINGS_PATH,
+        data=json.dumps(settings, ensure_ascii=False, indent=2).encode("utf-8"),
+        timeout=30,
+    )
+    response.raise_for_status()
+
+
+def join_email_recipients(*addresses):
+    """Return a comma-separated list of non-empty, unique email recipients."""
+    result = []
+    for address in addresses:
+        for item in str(address or "").split(","):
+            item = item.strip()
+            if item and item not in result:
+                result.append(item)
+    return ", ".join(result) or None
 
 def send_email(to_address, subject, body, cc=None, reply_to=None):
     cfg = get_secret("smtp", {})
@@ -315,6 +363,38 @@ def render_admin():
         st.error(f"{t('cloud_load_error')} {exc}")
         return
 
+    st.subheader(t("notification_settings"))
+    try:
+        notification_settings = load_notification_settings()
+    except Exception as exc:
+        st.error(f"{t('cloud_load_error')} {exc}")
+        return
+
+    with st.form("notification_settings_form"):
+        admin_primary = st.text_input(
+            t("admin_primary_email"),
+            value=notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
+        )
+        admin_secondary = st.text_input(
+            t("admin_secondary_email"),
+            value=notification_settings.get("admin_cc_email", ""),
+        )
+        save_recipients = st.form_submit_button(t("save_notification_settings"))
+    if save_recipients:
+        if not admin_primary.strip():
+            st.error("L'adresse e-mail principale de l'administrateur est obligatoire.")
+        else:
+            try:
+                save_notification_settings({
+                    "admin_email": admin_primary.strip(),
+                    "admin_cc_email": admin_secondary.strip(),
+                })
+                st.success(t("notification_settings_saved"))
+                st.rerun()
+            except Exception as exc:
+                st.error(f"{t('cloud_error')} {exc}")
+
+    st.divider()
     statuses = [r.get("status", "pending") for r in records]
     st.metric(t("total"), len(records))
     c1, c2, c3 = st.columns(3)
@@ -407,6 +487,7 @@ def render_admin():
             st.info("Statut conservé en attente : aucune notification n'est envoyée au demandeur.")
         elif email:
             try:
+                current_notification_settings = load_notification_settings()
                 send_email(
                     email,
                     t("mail_user_subject"),
@@ -416,6 +497,7 @@ def render_admin():
                         status=status_display[status_options.index(new_status)],
                         comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
                     ),
+                    cc=join_email_recipients(record.get("admin_email", "")),
                 )
                 st.success(t("decision_saved"))
             except Exception as exc:
@@ -557,10 +639,15 @@ def render_form():
                             st.session_state.data = {}
                             st.session_state.step = 0
                             try:
-                                # Optional CC for internal follow-up; configured only by the app administrator.
-                                admin_cc = str(get_secret("ADMIN_CC_EMAIL", "") or "").strip()
+                                # Recipients are editable in the administrator area and stored in Nextcloud.
+                                recipients = load_notification_settings()
+                                admin_email = recipients.get("admin_email") or DEFAULT_ADMIN_EMAIL
+                                internal_cc = join_email_recipients(
+                                    recipients.get("admin_cc_email"),
+                                    record.get("admin_email", ""),
+                                )
                                 send_email(
-                                    ADMIN_EMAIL,
+                                    admin_email,
                                     t("mail_admin_subject"),
                                     t("mail_admin_body").format(
                                         project=record["project_name"],
@@ -568,7 +655,7 @@ def render_form():
                                         group=record["group"],
                                         path=remote_file,
                                     ),
-                                    cc=admin_cc or None,
+                                    cc=internal_cc,
                                     reply_to=record.get("manager_email", "").strip() or None,
                                 )
                                 st.success(t("submitted"))
