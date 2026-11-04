@@ -134,3 +134,4 @@ E-GES-01-Date-Heure-ProjectManager-Labo.docx
 La date et l'heure correspondent à l'instant de génération (format AAAAMMJJ-HHMMSS).
 Le nom du responsable de projet et le groupe/laboratoire sont ajoutés à la fin.
 Les caractères spéciaux sont remplacés par des tirets pour garantir un nom de fichier compatible.
+\n\nVersion 1.4.2 — Gestion des devis signés\n- L'administrateur peut indiquer si le devis est signé pour chaque demande active.\n- Import du devis signé au format PDF, DOC ou DOCX.\n- Stockage séparé dans Nextcloud : MyDrive/E-GES-01/Devis_Signes/.\n- Le statut et le chemin du devis sont conservés dans les métadonnées de la demande.\n

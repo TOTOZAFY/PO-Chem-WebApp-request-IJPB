@@ -512,7 +512,7 @@ def render_admin():
         from io import StringIO
         csv_buffer = StringIO()
         fields = ["id", "project_name", "project_manager", "manager_email", "group",
-                  "request_date", "submitted_at", "status", "admin_comment", "document_path"]
+                  "request_date", "submitted_at", "status", "admin_comment", "document_path", "quote_signed", "signed_quote_path"]
         writer = csv.DictWriter(csv_buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(active_records)
@@ -543,6 +543,63 @@ def render_admin():
             st.write(f"**{t('group')} :** {record.get('group','')}")
             st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
             st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
+
+            # Signed quotation management: the file is stored separately from request documents.
+            quote_signed_label = "Devis signé" if st.session_state.language == "fr" else "Quotation signed"
+            quote_upload_label = "Importer le devis signé (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload signed quotation (PDF, DOC or DOCX)"
+            quote_save_label = "Enregistrer le statut et le devis" if st.session_state.language == "fr" else "Save status and quotation"
+            existing_quote_path = record.get("signed_quote_path", "")
+            with st.form(f"signed_quote_form_{selected_id}"):
+                quote_signed = st.checkbox(
+                    quote_signed_label,
+                    value=bool(record.get("quote_signed", False)),
+                )
+                quote_file = st.file_uploader(
+                    quote_upload_label,
+                    type=["pdf", "doc", "docx"],
+                    key=f"signed_quote_upload_{selected_id}",
+                )
+                if existing_quote_path:
+                    st.caption(
+                        ("Devis déjà déposé : " if st.session_state.language == "fr" else "Quotation already uploaded: ")
+                        + existing_quote_path
+                    )
+                save_quote = st.form_submit_button(quote_save_label)
+            if save_quote:
+                if quote_signed and not (quote_file or existing_quote_path):
+                    st.warning(
+                        "Coche le statut uniquement après avoir importé le devis signé."
+                        if st.session_state.language == "fr"
+                        else "Upload the signed quotation before marking it as signed."
+                    )
+                else:
+                    try:
+                        new_quote_path = existing_quote_path
+                        if quote_file is not None:
+                            ensure_remote_folder("MyDrive/E-GES-01")
+                            ensure_remote_folder("MyDrive/E-GES-01/Devis_Signes")
+                            safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(quote_file.name)).strip("-")
+                            safe_original = safe_original or "devis-signe"
+                            new_quote_path = f"MyDrive/E-GES-01/Devis_Signes/{selected_id}_{safe_original}"
+                            quote_response = webdav_request("PUT", new_quote_path, data=quote_file.getvalue())
+                            quote_response.raise_for_status()
+                        record["quote_signed"] = bool(quote_signed)
+                        record["signed_quote_path"] = new_quote_path
+                        record["signed_quote_filename"] = quote_file.name if quote_file is not None else record.get("signed_quote_filename", "")
+                        record["quote_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                        save_metadata(records)
+                        st.success(
+                            "Statut du devis enregistré dans Nextcloud."
+                            if st.session_state.language == "fr"
+                            else "Quotation status saved to Nextcloud."
+                        )
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(
+                            f"Impossible d'enregistrer le devis : {exc}"
+                            if st.session_state.language == "fr"
+                            else f"Could not save quotation: {exc}"
+                        )
             status_options = ["pending", "accepted", "refused"]
             status_display = [t("status_pending"), t("status_accepted"), t("status_refused")]
             current_status = record.get("status", "pending")
