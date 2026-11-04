@@ -11,7 +11,7 @@ from docx import Document
 from docx.shared import Pt
 
 st.set_page_config(
-    page_title="Demande de projet | OV-Chimie-Métabolisme",
+    page_title="Projet / Project request | OV-Chimie-Métabolisme",
     page_icon="🧪",
     layout="wide",
 )
@@ -37,7 +37,7 @@ st.markdown(
     </style>
     <div class="hero">
       <h1>OV-Chimie-Métabolisme</h1>
-      <p>Formulaire de demande d'analyse — E-GES-01</p>
+      <p>Formulaire de demande d'analyse / Analysis project request form — E-GES-01</p>
     </div>
     """,
     unsafe_allow_html=True,
@@ -116,7 +116,7 @@ def build_document(form_data):
     add_to_existing_paragraph(table.cell(2, 1).paragraphs[0], form_data.get("admin_phone"))
     add_to_existing_paragraph(table.cell(2, 3).paragraphs[0], form_data.get("admin_email"))
 
-    # Project description: insert into the blank paragraphs above the platform notice.
+    # Projet / Project description: insert into the blank paragraphs above the platform notice.
     description_cell = table.cell(3, 0)
     description_paragraphs = description_cell.paragraphs
     description = form_data.get("project_description", "").strip()
@@ -147,7 +147,7 @@ def build_document(form_data):
     if bibliography:
         add_value(results_cell, "Bibliographie : " + bibliography)
 
-    # Project name and YES/NO choices. Original labels and page layout are retained.
+    # Projet / Project name and YES/NO choices. Original labels and page layout are retained.
     project_cell = table.cell(6, 0)
     add_to_existing_paragraph(project_cell.paragraphs[0], form_data.get("project_name"), bold=True)
     funding = form_data.get("funding", "NO")
@@ -188,7 +188,7 @@ with st.container(border=True):
             text_field("project_manager", "Responsable du projet *")
             text_field("group", "Groupe / laboratoire")
             selected_date = st.date_input(
-                "Date",
+                "Date / Date",
                 value=date.fromisoformat(data["date"]) if data.get("date") else date.today(),
             )
             data["date"] = selected_date.isoformat()
@@ -246,7 +246,7 @@ with st.container(border=True):
         summary = [
             ("Responsable", data.get("project_manager", "")),
             ("Groupe", data.get("group", "")),
-            ("Date", data.get("date", "")),
+            ("Date / Date", data.get("date", "")),
             ("E-mail", data.get("manager_email", "")),
             ("Projet", data.get("project_name", "")),
             ("Financement IJPB", data.get("funding", "NO")),
