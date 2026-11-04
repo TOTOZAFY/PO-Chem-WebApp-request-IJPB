@@ -25,7 +25,7 @@ TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template_E-GES-01.docx"
 CLOUD_FOLDER = "MyDrive/E-GES-01/Demandes_Word"
 METADATA_PATH = "MyDrive/E-GES-01/demandes_metadata.json"
 NOTIFICATION_SETTINGS_PATH = "MyDrive/E-GES-01/notification_settings.json"
-DEFAULT_
+DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
 TRANSLATIONS = {
     "fr": {
         "language": "Langue / Language", "form": "Formulaire de demande",
