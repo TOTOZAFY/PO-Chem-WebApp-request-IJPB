@@ -1,137 +1,19 @@
-# PO-Chem-WebApp-Request — E-GES-01
+PO-Chem-WebApp-Request — Version 1.4.7
 
-## Déploiement
-Repository : `TOTOZAFY/PO-Chem-WebApp-request-IJPB`
-Branch : `main`
-Main file : `app.py`
+Fichiers à placer à la racine du dépôt GitHub :
+- app.py
+- requirements.txt
+- template_E-GES-01.docx
 
-Fichiers à la racine :
-- `app.py`
-- `requirements.txt`
-- `template_E-GES-01.docx`
+Nouveauté — Types d'analyse entièrement bilingues :
+- Lorsqu'il ajoute un type, l'administrateur saisit le libellé français et sa traduction anglaise.
+- L'administrateur peut également sélectionner un type existant et modifier sa traduction anglaise.
+- Les traductions personnalisées sont sauvegardées dans MyDrive/notification_settings.json sur Nextcloud.
+- Le formulaire public affiche le libellé correspondant à la langue choisie (FR/EN).
+- Les statistiques et les détails de demande dans l'espace administrateur utilisent également la traduction anglaise lorsque l'interface est en anglais.
+- Les anciens réglages Nextcloud restent compatibles : les types prédéfinis conservent leurs traductions ; les types personnalisés déjà créés peuvent recevoir leur traduction via « Modifier une traduction anglaise ».
+- Les types supprimés de la liste restent présents dans l'historique des anciennes demandes.
 
-## Secrets Streamlit
-
-Dans Streamlit Community Cloud > application > Settings > Secrets, configurer :
-
-```toml
-NEXTCLOUD_URL = "https://nextcloud.inrae.fr"
-NEXTCLOUD_USERNAME = "VOTRE_IDENTIFIANT_NEXTCLOUD"
-NEXTCLOUD_APP_PASSWORD = "VOTRE_MOT_DE_PASSE_APPLICATION"
-ADMIN_PASSWORD = "CHOISIR_UN_MOT_DE_PASSE_ADMIN_FORT"
-# Facultatif : adresse mise en copie des notifications de nouvelles demandes
-ADMIN_CC_EMAIL = "suivi@exemple.fr"
-
-[smtp]
-host = "SERVEUR_SMTP_INRAE"
-port = 587
-username = "COMPTE_SMTP"
-password = "MOT_DE_PASSE_SMTP"
-sender = "ADRESSE_EXPEDITRICE_AUTORISEE"
-```
-
-Ne jamais inscrire les mots de passe dans le code ni les communiquer dans une conversation.
-Le serveur SMTP et l'autorisation d'envoi doivent être fournis/validés par l'INRAE.
-L'adresse destinataire principale des nouvelles demandes est fixée à `ov-chimie@inrae.fr`.
-`ADMIN_CC_EMAIL` est facultative : si elle est renseignée, cette adresse reçoit une copie (CC) des notifications de nouvelles demandes pour le suivi interne. Si elle est vide ou absente, aucun CC n'est ajouté.
-
-## Fonctionnement
-- Le formulaire génère le document Word à partir du modèle fourni.
-- Le document est déposé dans `MyDrive/E-GES-01/Demandes_Word/`.
-- Les métadonnées (projet, responsable, groupe, date, statut, commentaire et chemin du document) sont stockées dans `MyDrive/E-GES-01/demandes_metadata.json`.
-- Une notification est envoyée à `ov-chimie@inrae.fr` après la soumission.
-- L'espace administrateur est protégé par `ADMIN_PASSWORD`.
-- L'administrateur peut choisir En attente / Acceptée / Refusée et ajouter un commentaire. La décision est enregistrée puis notifiée par e-mail au demandeur.
-- Le document Word n'est pas joint aux e-mails.
-
-## Important
-1. Cette version utilise WebDAV de Nextcloud. L'URL de base est transformée en endpoint WebDAV `/remote.php/dav/files/<identifiant>/`.
-2. Vérifier que l'espace `MyDrive` est bien accessible en WebDAV avec le compte concerné. Les règles d'accès INRAE peuvent restreindre WebDAV ou SMTP.
-3. Le stockage JSON convient à un volume modéré et à un usage administrateur unique. Pour des usages concurrents ou institutionnels à grande échelle, préférer une base de données validée par l'INRAE.
-4. Faire valider par l'INRAE l'hébergement Streamlit Cloud, le traitement des données personnelles et les notifications avant toute utilisation en production.
-5. La page 2 du modèle Word, réservée aux responsables de plateforme, n'est pas modifiée par le code.
-
-
-CONFIGURATION DES NOTIFICATIONS (version 1.3)
-------------------------------------------------
-Les trois adresses e-mail sont maintenant modifiables depuis l'espace administrateur :
-- E-mail principal de l'administrateur : destinataire des nouvelles demandes.
-- E-mail secondaire de l'administrateur (CC, facultatif) : copie des nouvelles demandes.
-- E-mail de suivi du personnel (facultatif) : reçoit les nouvelles demandes ainsi que les décisions d'acceptation ou de refus.
-
-Les paramètres sont enregistrés dans Nextcloud, dans :
-MyDrive/E-GES-01/notification_settings.json
-
-Le premier accès utilise par défaut ov-chimie@inrae.fr comme adresse principale.
-Le personnel de suivi est mis en copie des notifications de décision adressées au demandeur.
-
-
-MISE À JOUR DU SUIVI DU PERSONNEL (version 1.3.1)
---------------------------------------------------
-Le suivi du personnel est désormais propre à chaque demande :
-- L'adresse du champ « E-mail du personnel administratif » du formulaire reçoit la notification liée à cette demande.
-- Elle reçoit également la notification lorsqu'une décision (acceptation/refus) est prise pour cette demande.
-- Aucun autre personnel ne reçoit ces notifications.
-- L'administrateur principal et son adresse secondaire en CC restent configurables dans l'espace administrateur.
-
-
-MISE À JOUR DE LA SECTION « INFORMATIONS GÉNÉRALES »
----------------------------------------------------
-La section est désormais organisée en deux sous-sections :
-- Demandeur : responsable du projet, groupe/laboratoire, date, téléphone et e-mail du responsable.
-- Administrateur : adresse e-mail principale (affichée en lecture seule et gérée dans l'espace administrateur) et e-mail du personnel administratif facultatif.
-Le nom et le téléphone du personnel administratif ne sont plus demandés dans le formulaire.
-
-
-CORRECTION DE LA SECTION DEMANDEUR / ADMINISTRATEUR (version 1.3.4)
--------------------------------------------------------------------
-Les informations « Personnel administratif du laboratoire », son numéro de téléphone
-et son e-mail facultatif appartiennent bien à la section Demandeur : elles décrivent
-le laboratoire du demandeur. L'adresse e-mail de l'administrateur de la plateforme
-reste seule dans la section Administrateur et est gérée depuis l'espace administrateur.
-Le personnel du laboratoire indiqué dans une demande reçoit uniquement les notifications
-relatives à cette demande.
-
-
-INTITULÉ DE LA SECTION PLATEFORME (version 1.3.5)
--------------------------------------------------
-Le titre « Administrateur » est remplacé par :
-« Plateforme Observatoire du végétal chimie et métabolisme ».
-Le contenu de cette section reste limité à l'adresse e-mail de notification de la plateforme.
-
-
-CORRECTION AFFICHAGE DE L'ADRESSE DE LA PLATEFORME (version 1.3.6)
-------------------------------------------------------------------
-La section « Plateforme Observatoire du végétal chimie et métabolisme »
-affiche désormais explicitement le champ « E-mail de contact de la plateforme ».
-Le champ est en lecture seule dans le formulaire public ; l'adresse reste modifiable
-depuis l'espace administrateur et reçoit les notifications de nouvelles demandes.
-
-
-AJOUT DU CONTACT PERSONNEL DE LA PLATEFORME (version 1.3.7)
------------------------------------------------------------
-Sous l'adresse de contact principale de la plateforme, un champ facultatif
-« E-mail du personnel de la plateforme » est disponible pour chaque demande.
-S'il est renseigné, ce contact reçoit uniquement les notifications relatives
-à cette demande (nouvelle demande et décision). Il est distinct du personnel
-administratif du laboratoire du demandeur, qui reste dans la section Demandeur.
-
-
-TRADUCTION FRANÇAIS / ANGLAIS (version 1.3.8)
----------------------------------------------
-L'interface sélectionnée via le sélecteur de langue est harmonisée en français et en anglais :
-formulaire, intitulés, aides, messages d'erreur, validation, espace administrateur,
-statistiques, export et récapitulatif des réponses. Le nom officiel « Plateforme
-Observatoire du végétal chimie et métabolisme » reste volontairement en français.
-Le modèle Word officiel conserve son texte d'origine.
-
-
-NOM DU DOCUMENT WORD (version 1.3.9)
-------------------------------------
-Le document Word généré porte désormais le nom :
-E-GES-01-Date-Heure-ProjectManager-Labo.docx
-
-La date et l'heure correspondent à l'instant de génération (format AAAAMMJJ-HHMMSS).
-Le nom du responsable de projet et le groupe/laboratoire sont ajoutés à la fin.
-Les caractères spéciaux sont remplacés par des tirets pour garantir un nom de fichier compatible.
-\n\nVersion 1.4.2 — Gestion des devis signés\n- L'administrateur peut indiquer si le devis est signé pour chaque demande active.\n- Import du devis signé au format PDF, DOC ou DOCX.\n- Stockage séparé dans Nextcloud : MyDrive/E-GES-01/Devis_Signes/.\n- Le statut et le chemin du devis sont conservés dans les métadonnées de la demande.\n\n\nVersion 1.4.3 — Champs obligatoires\n- Le nom du responsable de projet, son e-mail, le groupe/laboratoire et le nom du projet sont obligatoires.\n- Le format de l'adresse e-mail est vérifié.\n- La génération et l'envoi de la demande sont bloqués tant que ces champs ne sont pas valides.\n
+Déploiement :
+Remplacer app.py et README_DEPLOIEMENT.txt dans le dépôt GitHub. Les autres fichiers restent identiques.
+Conserver les secrets Streamlit existants.
