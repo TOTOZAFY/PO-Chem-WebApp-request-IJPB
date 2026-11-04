@@ -22,9 +22,9 @@ st.set_page_config(
 
 APP_NAME = "PO-Chem-WebApp-Request"
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template_E-GES-01.docx")
-CLOUD_FOLDER = "MyDrive/E-GES-01/Demandes_Word"
-METADATA_PATH = "MyDrive/E-GES-01/demandes_metadata.json"
-NOTIFICATION_SETTINGS_PATH = "MyDrive/E-GES-01/notification_settings.json"
+CLOUD_FOLDER = "MyDrive/Demandes_Analyses"
+METADATA_PATH = "MyDrive/demandes_metadata.json"
+NOTIFICATION_SETTINGS_PATH = "MyDrive/notification_settings.json"
 DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
 TRANSLATIONS = {
     "fr": {
@@ -81,9 +81,9 @@ TRANSLATIONS = {
         "not_configured_admin": "Espace administrateur indisponible : configurez ADMIN_PASSWORD dans les secrets Streamlit.",
         "doc_path": "Document dans Nextcloud", "created": "Soumise le", "status_pending": "En attente",
         "status_accepted": "Acceptée", "status_refused": "Refusée",
-        "mail_admin_subject": "Nouvelle demande E-GES-01 reçue",
-        "mail_user_subject": "Mise à jour de votre demande E-GES-01",
-        "mail_admin_body": "Une nouvelle demande E-GES-01 a été soumise.\nProjet : {project}\nResponsable : {manager}\nGroupe : {group}\nDocument stocké dans Nextcloud : {path}",
+        "mail_admin_subject": "Nouvelle demande d'analyse reçue",
+        "mail_user_subject": "Mise à jour de votre demande d'analyse",
+        "mail_admin_body": "Une nouvelle demande d'analyse a été soumise.\nProjet : {project}\nResponsable : {manager}\nGroupe : {group}\nDocument stocké dans Nextcloud : {path}",
         "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\n",
         "back_form": "Retour au formulaire",
         "platform_contact_email": "E-mail de contact de la plateforme",
@@ -170,9 +170,9 @@ TRANSLATIONS = {
         "not_configured_admin": "Administrator area unavailable: set ADMIN_PASSWORD in Streamlit secrets.",
         "doc_path": "Document in Nextcloud", "created": "Submitted on", "status_pending": "Pending",
         "status_accepted": "Accepted", "status_refused": "Rejected",
-        "mail_admin_subject": "New E-GES-01 request received",
-        "mail_user_subject": "Update on your E-GES-01 request",
-        "mail_admin_body": "A new E-GES-01 request has been submitted.\nProject: {project}\nManager: {manager}\nGroup: {group}\nDocument stored in Nextcloud: {path}",
+        "mail_admin_subject": "New analysis request received",
+        "mail_user_subject": "Update on your analysis request",
+        "mail_admin_body": "A new analysis request has been submitted.\nProject: {project}\nManager: {manager}\nGroup: {group}\nDocument stored in Nextcloud: {path}",
         "mail_user_body": "Hello {manager},\n\nThe request for project “{project}” has been updated.\nDecision: {status}\nComment: {comment}\n\nBest regards,\n",
         "back_form": "Back to request form",
         "platform_contact_email": "Platform contact email",
@@ -576,11 +576,11 @@ def render_admin():
                     try:
                         new_quote_path = existing_quote_path
                         if quote_file is not None:
-                            ensure_remote_folder("MyDrive/E-GES-01")
-                            ensure_remote_folder("MyDrive/E-GES-01/Devis_Signes")
+                            ensure_remote_folder("MyDrive")
+                            ensure_remote_folder("MyDrive/Devis_Signes")
                             safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(quote_file.name)).strip("-")
                             safe_original = safe_original or "devis-signe"
-                            new_quote_path = f"MyDrive/E-GES-01/Devis_Signes/{selected_id}_{safe_original}"
+                            new_quote_path = f"MyDrive/Devis_Signes/{selected_id}_{safe_original}"
                             quote_response = webdav_request("PUT", new_quote_path, data=quote_file.getvalue())
                             quote_response.raise_for_status()
                         record["quote_signed"] = bool(quote_signed)
@@ -733,7 +733,7 @@ def render_form():
         .hero p {margin: .4rem 0 0; color: #526575;}
         </style>
         <div class="hero"><h1>OV-Chimie-Métabolisme/IJPB-INRAE Versailles</h1>
-        <p>PO-Chem-WebApp-Request — E-GES-01</p></div>
+        <p>PO-Chem-WebApp-Request</p></div>
         """,
         unsafe_allow_html=True,
     )
