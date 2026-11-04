@@ -84,7 +84,7 @@ TRANSLATIONS = {
         "mail_admin_subject": "Nouvelle demande E-GES-01 reçue",
         "mail_user_subject": "Mise à jour de votre demande E-GES-01",
         "mail_admin_body": "Une nouvelle demande E-GES-01 a été soumise.\nProjet : {project}\nResponsable : {manager}\nGroupe : {group}\nDocument stocké dans Nextcloud : {path}",
-        "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\nOV-Chimie-Métabolisme",
+        "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\n",
         "back_form": "Retour au formulaire",
         "platform_contact_email": "E-mail de contact de la plateforme",
         "platform_contact_help": "Cette adresse reçoit les nouvelles demandes. Elle est modifiable dans l'espace de gestion de la plateforme.",
@@ -173,7 +173,7 @@ TRANSLATIONS = {
         "mail_admin_subject": "New E-GES-01 request received",
         "mail_user_subject": "Update on your E-GES-01 request",
         "mail_admin_body": "A new E-GES-01 request has been submitted.\nProject: {project}\nManager: {manager}\nGroup: {group}\nDocument stored in Nextcloud: {path}",
-        "mail_user_body": "Hello {manager},\n\nThe request for project “{project}” has been updated.\nDecision: {status}\nComment: {comment}\n\nBest regards,\nOV-Chimie-Métabolisme",
+        "mail_user_body": "Hello {manager},\n\nThe request for project “{project}” has been updated.\nDecision: {status}\nComment: {comment}\n\nBest regards,\n",
         "back_form": "Back to request form",
         "platform_contact_email": "Platform contact email",
         "platform_contact_help": "This address receives new requests. It can be changed in the platform management area.",
@@ -732,7 +732,7 @@ def render_form():
         .hero h1 {margin: 0; color: #183b56; font-size: 1.8rem;}
         .hero p {margin: .4rem 0 0; color: #526575;}
         </style>
-        <div class="hero"><h1>OV-Chimie-Métabolisme</h1>
+        <div class="hero"><h1>OV-Chimie-Métabolisme/IJPB-INRAE Versailles</h1>
         <p>PO-Chem-WebApp-Request — E-GES-01</p></div>
         """,
         unsafe_allow_html=True,
