@@ -26,31 +26,6 @@ CLOUD_FOLDER = "MyDrive/Demandes_Analyses"
 METADATA_PATH = "MyDrive/demandes_metadata.json"
 NOTIFICATION_SETTINGS_PATH = "MyDrive/notification_settings.json"
 DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
-ANALYSIS_TYPES = [
-    "Métabolites primaires par GC-MS",
-    "Métabolomique non ciblée par LC-HRMS",
-    "Analyses d'acides gras par GC-MS",
-    "Analyse de stérols totaux par GC-MS",
-    "Lipidomique non ciblée LC-HRMS",
-    "Lipidomique ciblée LC-MS/MS",
-    "Oligoglycomique par LC-HRMS",
-    "Monosaccharides par GC-MS",
-    "Hormones par LC-MS/MS",
-    "Développements spécifiques",
-]
-SPECIFIC_DEVELOPMENT_TYPE = "Développements spécifiques"
-ANALYSIS_TYPES_EN = {
-    "Métabolites primaires par GC-MS": "Primary metabolites by GC-MS",
-    "Métabolomique non ciblée par LC-HRMS": "Untargeted metabolomics by LC-HRMS",
-    "Analyses d'acides gras par GC-MS": "Fatty acid analysis by GC-MS",
-    "Analyse de stérols totaux par GC-MS": "Total sterol analysis by GC-MS",
-    "Lipidomique non ciblée LC-HRMS": "Untargeted lipidomics by LC-HRMS",
-    "Lipidomique ciblée LC-MS/MS": "Targeted lipidomics by LC-MS/MS",
-    "Oligoglycomique par LC-HRMS": "Oligoglycomics by LC-HRMS",
-    "Monosaccharides par GC-MS": "Monosaccharides by GC-MS",
-    "Hormones par LC-MS/MS": "Hormones by LC-MS/MS",
-    "Développements spécifiques": "Specific developments",
-}
 TRANSLATIONS = {
     "fr": {
         "language": "Langue / Language", "form": "Formulaire de demande",
@@ -108,36 +83,15 @@ TRANSLATIONS = {
         "status_accepted": "Acceptée", "status_refused": "Refusée",
         "mail_admin_subject": "Nouvelle demande d'analyse reçue",
         "mail_user_subject": "Mise à jour de votre demande d'analyse",
-        "mail_admin_body": "Une nouvelle demande d'analyse a été soumise.\nProjet : {project}\nResponsable : {manager}\nGroupe : {group}\nType d’analyse : {analysis_type}\nDétails : {analysis_details}\nDocument stocké dans Nextcloud : {path}",
+        "mail_admin_body": "Une nouvelle demande d'analyse a été soumise.\nProjet : {project}\nResponsable : {manager}\nGroupe : {group}\nDocument stocké dans Nextcloud : {path}",
         "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\n",
         "back_form": "Retour au formulaire",
         "platform_contact_email": "E-mail de contact de la plateforme",
         "platform_contact_help": "Cette adresse reçoit les nouvelles demandes. Elle est modifiable dans l'espace de gestion de la plateforme.",
         "platform_contact_caption": "Adresse de notification de la plateforme — affichée ici à titre informatif.",
-        "analysis_type": "Type d’analyse *", "analysis_type_stats": "Demandes par type d’analyse",
-         "analysis_type_required": "Veuillez sélectionner un type d’analyse.",
-        "specific_development_details": "Détails du développement spécifique *",
-        "specific_development_help": "Décrivez la demande : métabolites ou molécules ciblés, matrice, objectifs, méthode envisagée, contraintes ou besoins particuliers.",
-        "specific_development_required": "Veuillez préciser le développement spécifique demandé.",
         "yearly": "Demandes par année",
         "export_csv": "Exporter les statistiques (CSV)",
         "required_admin_email": "L'adresse e-mail principale de la plateforme est obligatoire.",
-        "manage_analysis_types": "Gestion des types d’analyse",
-        "add_analysis_type": "Ajouter un type d’analyse",
-        "new_analysis_type": "Nom du nouveau type d’analyse",
-        "analysis_type_added": "Type d’analyse ajouté.",
-        "analysis_type_exists": "Ce type d’analyse existe déjà.",
-        "remove_analysis_type": "Supprimer un type d’analyse",
-        "analysis_type_removed": "Type d’analyse supprimé.",
-        "analysis_type_locked": "Le type « Développements spécifiques » ne peut pas être supprimé car il active le champ de description complémentaire.",
-        "save_analysis_type": "Ajouter",
-        "delete_analysis_type": "Supprimer",
-        "new_analysis_type_en": "Traduction anglaise du type d’analyse",
-        "analysis_type_translation_required": "Veuillez renseigner le nom français et la traduction anglaise.",
-        "analysis_type_translation_saved": "Type d’analyse et traduction anglaise enregistrés.",
-        "edit_analysis_type_translation": "Modifier une traduction anglaise",
-        "select_analysis_type_translation": "Type d’analyse à modifier",
-        "save_analysis_type_translation": "Enregistrer la traduction",
         "pending_no_notification": "Statut conservé en attente : aucune notification n'est envoyée au demandeur.",
         "template_missing": "Le modèle Word template_E-GES-01.docx est introuvable.",
         "word_generation_error": "Erreur de génération Word :",
@@ -218,36 +172,15 @@ TRANSLATIONS = {
         "status_accepted": "Accepted", "status_refused": "Rejected",
         "mail_admin_subject": "New analysis request received",
         "mail_user_subject": "Update on your analysis request",
-        "mail_admin_body": "A new analysis request has been submitted.\nProject: {project}\nManager: {manager}\nGroup: {group}\nAnalysis type: {analysis_type}\nDetails: {analysis_details}\nDocument stored in Nextcloud: {path}",
+        "mail_admin_body": "A new analysis request has been submitted.\nProject: {project}\nManager: {manager}\nGroup: {group}\nDocument stored in Nextcloud: {path}",
         "mail_user_body": "Hello {manager},\n\nThe request for project “{project}” has been updated.\nDecision: {status}\nComment: {comment}\n\nBest regards,\n",
         "back_form": "Back to request form",
         "platform_contact_email": "Platform contact email",
         "platform_contact_help": "This address receives new requests. It can be changed in the platform management area.",
         "platform_contact_caption": "Platform notification address — displayed here for information.",
-        "analysis_type": "Analysis type *", "analysis_type_stats": "Requests by analysis type",
-         "analysis_type_required": "Please select an analysis type.",
-        "specific_development_details": "Specific development details *",
-        "specific_development_help": "Describe the request: target metabolites or molecules, sample matrix, objectives, proposed method, constraints or specific needs.",
-        "specific_development_required": "Please describe the requested specific development.",
         "yearly": "Requests per year",
         "export_csv": "Export statistics (CSV)",
         "required_admin_email": "The platform primary email address is required.",
-        "manage_analysis_types": "Manage analysis types",
-        "add_analysis_type": "Add an analysis type",
-        "new_analysis_type": "New analysis type name",
-        "analysis_type_added": "Analysis type added.",
-        "analysis_type_exists": "This analysis type already exists.",
-        "remove_analysis_type": "Remove an analysis type",
-        "analysis_type_removed": "Analysis type removed.",
-        "analysis_type_locked": "“Specific developments” cannot be removed because it activates the additional details field.",
-        "save_analysis_type": "Add",
-        "delete_analysis_type": "Remove",
-        "new_analysis_type_en": "English translation of the analysis type",
-        "analysis_type_translation_required": "Please enter both the French name and the English translation.",
-        "analysis_type_translation_saved": "Analysis type and English translation saved.",
-        "edit_analysis_type_translation": "Edit an English translation",
-        "select_analysis_type_translation": "Analysis type to edit",
-        "save_analysis_type_translation": "Save translation",
         "pending_no_notification": "Status remains pending: no notification is sent to the requester.",
         "template_missing": "The Word template template_E-GES-01.docx could not be found.",
         "word_generation_error": "Word generation error:",
@@ -344,8 +277,6 @@ def load_notification_settings():
         return {
             "admin_email": DEFAULT_ADMIN_EMAIL,
             "admin_cc_email": "",
-            "analysis_types": ANALYSIS_TYPES.copy(),
-            "analysis_type_translations": ANALYSIS_TYPES_EN.copy(),
         }
     response.raise_for_status()
     settings = response.json()
@@ -354,22 +285,6 @@ def load_notification_settings():
     return {
         "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
         "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
-        "analysis_types": (
-            [str(x).strip() for x in settings.get("analysis_types", ANALYSIS_TYPES)
-             if str(x).strip()]
-            if isinstance(settings.get("analysis_types", ANALYSIS_TYPES), list)
-            else ANALYSIS_TYPES.copy()
-        ),
-        "analysis_type_translations": {
-            **ANALYSIS_TYPES_EN,
-            **(
-                {str(k).strip(): str(v).strip()
-                 for k, v in settings.get("analysis_type_translations", {}).items()
-                 if str(k).strip() and str(v).strip()}
-                if isinstance(settings.get("analysis_type_translations", {}), dict)
-                else {}
-            ),
-        },
     }
 
 
@@ -450,30 +365,7 @@ def build_document(form_data):
         target.paragraph_format.space_after = Pt(4)
         target.add_run(description).font.size = Pt(9)
 
-    # Record the selected analysis type directly in the Word section
-    # "Nature et nombre des échantillons", before the sample description.
     samples_cell = table.cell(4, 0)
-    analysis_type = form_data.get("analysis_type", "").strip()
-    if analysis_type:
-        type_paragraph = samples_cell.add_paragraph()
-        type_paragraph.paragraph_format.space_after = Pt(4)
-        type_run = type_paragraph.add_run(
-            ("Type d’analyse : " if st.session_state.get("language", "fr") == "fr" else "Analysis type: ")
-            + analysis_type
-        )
-        type_run.bold = True
-        type_run.font.size = Pt(9)
-
-    analysis_details = form_data.get("analysis_details", "").strip()
-    if analysis_details:
-        details_paragraph = samples_cell.add_paragraph()
-        details_paragraph.paragraph_format.space_after = Pt(4)
-        details_run = details_paragraph.add_run(
-            ("Détails du développement spécifique : " if st.session_state.get("language", "fr") == "fr" else "Specific development details: ")
-            + analysis_details
-        )
-        details_run.font.size = Pt(9)
-
     samples = form_data.get("samples", "").strip()
     if samples:
         target = next((p for p in samples_cell.paragraphs if not p.text.strip()), None)
@@ -493,7 +385,8 @@ def build_document(form_data):
     guidance_cell = table.cell(7, 0)
     add_to_existing_paragraph(guidance_cell.paragraphs[0], f"{t('answer_prefix')} {form_data.get('guidance', 'NO')}", bold=True)
 
-    # Filename format: E-GES-01-Date-Heure-ProjectManager-Lab.docx
+    # Filename format includes the unique request reference.
+    request_reference = form_data.get("request_reference", "REQ-SANS-ID")
     timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
     manager_name = re.sub(
         r"[^A-Za-z0-9]+", "-", form_data.get("project_manager", "NOM")
@@ -501,7 +394,7 @@ def build_document(form_data):
     lab_name = re.sub(
         r"[^A-Za-z0-9]+", "-", form_data.get("group", "LABO")
     ).strip("-") or "LABO"
-    reference = f"E-GES-01-{timestamp}-{manager_name}-{lab_name}"
+    reference = f"E-GES-01-{request_reference}-{timestamp}-{manager_name}-{lab_name}"
     for row in doc.tables[0].rows:
         for cell in row.cells:
             for paragraph in cell.paragraphs:
@@ -565,96 +458,11 @@ def render_admin():
                 save_notification_settings({
                     "admin_email": admin_primary.strip(),
                     "admin_cc_email": admin_secondary.strip(),
-                    "analysis_types": notification_settings.get("analysis_types", ANALYSIS_TYPES),
-                    "analysis_type_translations": notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN),
                 })
                 st.success(t("notification_settings_saved"))
                 st.rerun()
             except Exception as exc:
                 st.error(f"{t('cloud_error')} {exc}")
-
-    st.subheader(t("manage_analysis_types"))
-    managed_types = notification_settings.get("analysis_types") or ANALYSIS_TYPES.copy()
-    with st.form("add_analysis_type_form"):
-        new_type = st.text_input(t("new_analysis_type"))
-        new_type_en = st.text_input(t("new_analysis_type_en"))
-        add_type = st.form_submit_button(t("save_analysis_type"))
-    if add_type:
-        candidate = new_type.strip()
-        candidate_en = new_type_en.strip()
-        if not candidate or not candidate_en:
-            st.warning(t("analysis_type_translation_required"))
-        elif any(candidate.casefold() == item.casefold() for item in managed_types):
-            st.warning(t("analysis_type_exists"))
-        else:
-            try:
-                managed_types.append(candidate)
-                type_translations = notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN.copy())
-                type_translations[candidate] = candidate_en
-                save_notification_settings({
-                    "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
-                    "admin_cc_email": notification_settings.get("admin_cc_email", ""),
-                    "analysis_types": managed_types,
-                    "analysis_type_translations": type_translations,
-                })
-                st.success(t("analysis_type_translation_saved"))
-                st.rerun()
-            except Exception as exc:
-                st.error(f"{t('cloud_error')} {exc}")
-
-    st.markdown(f"**{t('edit_analysis_type_translation')}**")
-    current_type_translations = notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN.copy())
-    with st.form("edit_analysis_type_translation_form"):
-        type_to_translate = st.selectbox(
-            t("select_analysis_type_translation"),
-            options=managed_types,
-            key="type_to_translate",
-        )
-        edited_translation = st.text_input(
-            t("new_analysis_type_en"),
-            value=current_type_translations.get(type_to_translate, ""),
-            key="edited_analysis_type_translation",
-        )
-        save_translation = st.form_submit_button(t("save_analysis_type_translation"))
-    if save_translation:
-        if not edited_translation.strip():
-            st.warning(t("analysis_type_translation_required"))
-        else:
-            try:
-                current_type_translations[type_to_translate] = edited_translation.strip()
-                save_notification_settings({
-                    "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
-                    "admin_cc_email": notification_settings.get("admin_cc_email", ""),
-                    "analysis_types": managed_types,
-                    "analysis_type_translations": current_type_translations,
-                })
-                st.success(t("analysis_type_translation_saved"))
-                st.rerun()
-            except Exception as exc:
-                st.error(f"{t('cloud_error')} {exc}")
-
-    removable_types = [item for item in managed_types if item != SPECIFIC_DEVELOPMENT_TYPE]
-    if removable_types:
-        with st.form("remove_analysis_type_form"):
-            type_to_remove = st.selectbox(t("remove_analysis_type"), options=removable_types)
-            remove_type = st.form_submit_button(t("delete_analysis_type"))
-        if remove_type:
-            try:
-                updated_types = [item for item in managed_types if item != type_to_remove]
-                if not updated_types:
-                    st.warning(t("analysis_type_required"))
-                else:
-                    save_notification_settings({
-                        "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
-                        "admin_cc_email": notification_settings.get("admin_cc_email", ""),
-                        "analysis_types": updated_types,
-                        "analysis_type_translations": notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN),
-                    })
-                    st.success(t("analysis_type_removed"))
-                    st.rerun()
-            except Exception as exc:
-                st.error(f"{t('cloud_error')} {exc}")
-    st.caption(t("analysis_type_locked"))
 
     # Archived requests remain in the same Nextcloud metadata file; only their
     # archived flag changes. This preserves existing records and compatibility.
@@ -673,17 +481,6 @@ def render_admin():
         c1.metric(t("pending"), statuses.count("pending"))
         c2.metric(t("accepted"), statuses.count("accepted"))
         c3.metric(t("refused"), statuses.count("refused"))
-
-        st.subheader(t("analysis_type_stats"))
-        analysis_counts = {}
-        for item in active_records:
-            analysis_type = item.get("analysis_type") or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
-            display_type = analysis_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(analysis_type, ANALYSIS_TYPES_EN.get(analysis_type, analysis_type))
-            analysis_counts[display_type] = analysis_counts.get(display_type, 0) + 1
-        if analysis_counts:
-            st.bar_chart(dict(sorted(analysis_counts.items())))
-        else:
-            st.caption(t("no_requests"))
 
         st.subheader(t("by_status"))
         status_labels = {
@@ -716,7 +513,7 @@ def render_admin():
         from io import StringIO
         csv_buffer = StringIO()
         fields = ["id", "project_name", "project_manager", "manager_email", "group",
-                  "request_date", "submitted_at", "status", "admin_comment", "document_path", "quote_signed", "signed_quote_path", "analysis_type", "analysis_details"]
+                  "request_date", "submitted_at", "status", "admin_comment", "document_path", "quote_signed", "signed_quote_path"]
         writer = csv.DictWriter(csv_buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(active_records)
@@ -746,12 +543,6 @@ def render_admin():
                 st.write(f"**{t('manager_email')} :** —")
             st.write(f"**{t('group')} :** {record.get('group','')}")
             st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
-            stored_type = record.get("analysis_type", "")
-            shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
-            st.write(f"**{t('analysis_type')} :** {shown_type or '—'}")
-            if record.get("analysis_details"):
-                details_label = "Détails du développement spécifique" if st.session_state.language == "fr" else "Specific development details"
-                st.write(f"**{details_label} :** {record.get('analysis_details')}")
             st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
 
             # Signed quotation management: the file is stored separately from request documents.
@@ -930,15 +721,6 @@ def render_form():
     if "data" not in st.session_state:
         st.session_state.data = {}
     data = st.session_state.data
-    try:
-        form_analysis_settings = load_notification_settings()
-        available_analysis_types = form_analysis_settings.get("analysis_types") or ANALYSIS_TYPES.copy()
-        available_analysis_type_translations = form_analysis_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN)
-    except Exception:
-        available_analysis_types = ANALYSIS_TYPES.copy()
-        available_analysis_type_translations = ANALYSIS_TYPES_EN.copy()
-    if SPECIFIC_DEVELOPMENT_TYPE not in available_analysis_types:
-        available_analysis_types.append(SPECIFIC_DEVELOPMENT_TYPE)
     steps = t("steps")
     step = min(st.session_state.step, len(steps) - 1)
 
@@ -998,32 +780,6 @@ def render_form():
             st.caption(
                 t("platform_contact_caption")
             )
-            current_analysis_type = data.get("analysis_type", available_analysis_types[0])
-            analysis_index = available_analysis_types.index(current_analysis_type) if current_analysis_type in available_analysis_types else 0
-            analysis_labels = available_analysis_types if st.session_state.language == "fr" else [
-                available_analysis_type_translations.get(item, ANALYSIS_TYPES_EN.get(item, item)) for item in available_analysis_types
-            ]
-            selected_analysis_label = st.selectbox(
-                t("analysis_type"),
-                options=analysis_labels,
-                index=analysis_index,
-                key="analysis_type_select",
-            )
-            data["analysis_type"] = (
-                selected_analysis_label if st.session_state.language == "fr"
-                else available_analysis_types[analysis_labels.index(selected_analysis_label)]
-            )
-            if data["analysis_type"] == SPECIFIC_DEVELOPMENT_TYPE:
-                st.text_area(
-                    t("specific_development_details"),
-                    value=data.get("analysis_details", ""),
-                    height=130,
-                    help=t("specific_development_help"),
-                    key="analysis_details_input",
-                )
-                data["analysis_details"] = st.session_state.get("analysis_details_input", "")
-            else:
-                data["analysis_details"] = ""
             text_field("platform_staff_email", t("platform_staff_email"))
             st.caption(t("recommended"))
         elif step == 1:
@@ -1054,8 +810,6 @@ def render_form():
                 (t("group"), data.get("group", "")),
                 (t("date"), data.get("date", "")),
                 (t("manager_email"), data.get("manager_email", "")),
-                (t("analysis_type"), data.get("analysis_type", "")),
-                (t("specific_development_details"), data.get("analysis_details", "") if data.get("analysis_type") == SPECIFIC_DEVELOPMENT_TYPE else ""),
                 (t("project_name"), data.get("project_name", "")),
                 (t("funding"), data.get("funding", "NO")),
                 (t("guidance"), data.get("guidance", "NO")),
@@ -1073,8 +827,6 @@ def render_form():
                     "admin_phone": t("project_staff_phone_short"),
                     "admin_email": t("project_staff_email_short"),
                     "platform_staff_email": t("platform_staff_email_short"),
-                    "analysis_type": t("analysis_type"),
-                    "analysis_details": t("specific_development_details"),
                     "project_description": t("project_description_short"),
                     "samples": t("samples_short"),
                     "preliminary": t("preliminary_short"),
@@ -1090,20 +842,17 @@ def render_form():
                 data.get("manager_email", "").strip(),
                 data.get("group", "").strip(),
                 data.get("project_name", "").strip(),
-                data.get("analysis_type", "").strip(),
             ]
-            email_is_valid = bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", data.get("manager_email", "").strip()))
-            specific_details_valid = (
-                data.get("analysis_type") != SPECIFIC_DEVELOPMENT_TYPE
-                or bool(data.get("analysis_details", "").strip())
-            )
-            form_is_valid = all(required_values) and email_is_valid and specific_details_valid
+            email_is_valid = bool(re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", data.get("manager_email", "").strip()))
+            form_is_valid = all(required_values) and email_is_valid
             if not form_is_valid:
-                if data.get("analysis_type") == SPECIFIC_DEVELOPMENT_TYPE and not data.get("analysis_details", "").strip():
-                    st.warning(t("specific_development_required"))
-                else:
-                    st.warning(t("required"))
+                st.warning(t("required"))
             else:
+                # Keep the same request reference while the user reviews/submits this form.
+                if not data.get("request_reference"):
+                    data["request_reference"] = (
+                        f"REQ-{datetime.now().astimezone().year}-{uuid.uuid4().hex[:8].upper()}"
+                    )
                 try:
                     document_bytes, filename = build_document(data)
                     st.download_button(
@@ -1124,7 +873,7 @@ def render_form():
                             upload = webdav_request("PUT", remote_file, data=document_bytes)
                             upload.raise_for_status()
                             records = load_metadata()
-                            request_id = str(uuid.uuid4())
+                            request_id = data.get("request_reference") or str(uuid.uuid4())
                             record = {
                                 "id": request_id,
                                 "project_name": data.get("project_name", ""),
@@ -1134,8 +883,6 @@ def render_form():
                                 "admin_phone": data.get("admin_phone", ""),
                                 "admin_email": data.get("admin_email", ""),
                                 "platform_staff_email": data.get("platform_staff_email", ""),
-                                "analysis_type": data.get("analysis_type", ""),
-                                "analysis_details": data.get("analysis_details", ""),
                                 "group": data.get("group", ""),
                                 "request_date": data.get("date", ""),
                                 "submitted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -1167,8 +914,6 @@ def render_form():
                                         project=record["project_name"],
                                         manager=record["project_manager"],
                                         group=record["group"],
-                                        analysis_type=record.get("analysis_type", ""),
-                                        analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
                                         path=remote_file,
                                     ),
                                     cc=internal_cc,
