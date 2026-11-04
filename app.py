@@ -34,8 +34,8 @@ TRANSLATIONS = {
         "steps": ["Contacts", "Description du projet", "Échantillons", "Résultats & bibliographie",
                   "Informations complémentaires", "Vérification & soumission"],
         "general": "1. Informations générales", "requester_section": "Demandeur", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Responsable du projet *",
-        "group": "Groupe / laboratoire", "date": "Date", "phone": "Téléphone",
-        "manager_email": "E-mail du responsable", "admin_staff": "Personnel administratif",
+        "group": "Groupe / laboratoire *", "date": "Date", "phone": "Téléphone",
+        "manager_email": "E-mail du responsable *", "admin_staff": "Personnel administratif",
         "admin_phone": "Téléphone du personnel administratif", "admin_email": "E-mail du personnel administratif (facultatif)",
         "recommended": "* Champ obligatoire.", "description": "2. Description du projet",
         "description_help": "Questions scientifiques et techniques à traiter, molécules à analyser.",
@@ -84,7 +84,7 @@ TRANSLATIONS = {
         "mail_admin_subject": "Nouvelle demande E-GES-01 reçue",
         "mail_user_subject": "Mise à jour de votre demande E-GES-01",
         "mail_admin_body": "Une nouvelle demande E-GES-01 a été soumise.\nProjet : {project}\nResponsable : {manager}\nGroupe : {group}\nDocument stocké dans Nextcloud : {path}",
-        "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\n",
+        "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\nOV-Chimie-Métabolisme",
         "back_form": "Retour au formulaire",
         "platform_contact_email": "E-mail de contact de la plateforme",
         "platform_contact_help": "Cette adresse reçoit les nouvelles demandes. Elle est modifiable dans l'espace de gestion de la plateforme.",
@@ -123,8 +123,8 @@ TRANSLATIONS = {
         "steps": ["Contacts", "Project description", "Samples", "Preliminary results & bibliography",
                   "Additional information", "Review & submission"],
         "general": "1. General information", "requester_section": "Requester", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Project manager *",
-        "group": "Group / laboratory", "date": "Date", "phone": "Telephone",
-        "manager_email": "Project manager email", "admin_staff": "Administrative staff",
+        "group": "Group / laboratory *", "date": "Date", "phone": "Telephone",
+        "manager_email": "Project manager email *", "admin_staff": "Administrative staff",
         "admin_phone": "Administrative staff telephone", "admin_email": "Administrative staff email (optional)",
         "recommended": "* Required field.", "description": "2. Project description",
         "description_help": "Scientific and technical questions to be addressed, molecules to be analysed.",
@@ -142,7 +142,7 @@ TRANSLATIONS = {
         "guidance_info": "The platform can connect you with IJPB scientists to help interpret the results. Co-authorship may then be required.",
         "review": "6. Review and submission", "all_answers": "Show all answers",
         "previous": "← Previous", "next": "Next →", "edit": "← Edit answers",
-        "required": "Please provide at least the project manager, their email address and the project name.",
+        "required": "Required fields: project manager name, email, laboratory / group, and project name. Please also check the email format.",
         "submit": "Submit request", "download": "Download Word document",
         "submitted": "Request saved to Nextcloud.",
         "submitted_notified": "Request saved to Nextcloud. The administrator notification was sent successfully.",
@@ -173,7 +173,7 @@ TRANSLATIONS = {
         "mail_admin_subject": "New E-GES-01 request received",
         "mail_user_subject": "Update on your E-GES-01 request",
         "mail_admin_body": "A new E-GES-01 request has been submitted.\nProject: {project}\nManager: {manager}\nGroup: {group}\nDocument stored in Nextcloud: {path}",
-        "mail_user_body": "Hello {manager},\n\nThe request for project “{project}” has been updated.\nDecision: {status}\nComment: {comment}\n\nBest regards,\n",
+        "mail_user_body": "Hello {manager},\n\nThe request for project “{project}” has been updated.\nDecision: {status}\nComment: {comment}\n\nBest regards,\nOV-Chimie-Métabolisme",
         "back_form": "Back to request form",
         "platform_contact_email": "Platform contact email",
         "platform_contact_help": "This address receives new requests. It can be changed in the platform management area.",
@@ -732,7 +732,7 @@ def render_form():
         .hero h1 {margin: 0; color: #183b56; font-size: 1.8rem;}
         .hero p {margin: .4rem 0 0; color: #526575;}
         </style>
-        <div class="hero"><h1>Plateforme OV-Chimie-Métabolisme/IJPB-INRAE Versailles</h1>
+        <div class="hero"><h1>OV-Chimie-Métabolisme</h1>
         <p>PO-Chem-WebApp-Request — E-GES-01</p></div>
         """,
         unsafe_allow_html=True,
@@ -836,7 +836,15 @@ def render_form():
                 }
                 for key, value in data.items():
                     st.markdown(f"**{answer_labels.get(key, key.replace('_', ' ').capitalize())} :** {value}")
-            if not data.get("project_manager") or not data.get("project_name") or not data.get("manager_email"):
+            required_values = [
+                data.get("project_manager", "").strip(),
+                data.get("manager_email", "").strip(),
+                data.get("group", "").strip(),
+                data.get("project_name", "").strip(),
+            ]
+            email_is_valid = bool(re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", data.get("manager_email", "").strip()))
+            form_is_valid = all(required_values) and email_is_valid
+            if not form_is_valid:
                 st.warning(t("required"))
             else:
                 try:
