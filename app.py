@@ -441,25 +441,6 @@ def build_document(form_data):
     add_to_existing_paragraph(table.cell(2, 3).paragraphs[0], form_data.get("admin_email"))
 
     description_cell = table.cell(3, 0)
-    analysis_type = form_data.get("analysis_type", "").strip()
-    if analysis_type:
-        type_paragraph = description_cell.add_paragraph()
-        type_paragraph.paragraph_format.space_after = Pt(4)
-        type_run = type_paragraph.add_run(
-            ("Type d’analyse : " if st.session_state.get("language", "fr") == "fr" else "Analysis type: ")
-            + analysis_type
-        )
-        type_run.bold = True
-        type_run.font.size = Pt(9)
-    analysis_details = form_data.get("analysis_details", "").strip()
-    if analysis_details:
-        details_paragraph = description_cell.add_paragraph()
-        details_paragraph.paragraph_format.space_after = Pt(4)
-        details_run = details_paragraph.add_run(
-            ("Détails du développement spécifique : " if st.session_state.get("language", "fr") == "fr" else "Specific development details: ")
-            + analysis_details
-        )
-        details_run.font.size = Pt(9)
     description_paragraphs = description_cell.paragraphs
     description = form_data.get("project_description", "").strip()
     if description:
@@ -469,7 +450,30 @@ def build_document(form_data):
         target.paragraph_format.space_after = Pt(4)
         target.add_run(description).font.size = Pt(9)
 
+    # Record the selected analysis type directly in the Word section
+    # "Nature et nombre des échantillons", before the sample description.
     samples_cell = table.cell(4, 0)
+    analysis_type = form_data.get("analysis_type", "").strip()
+    if analysis_type:
+        type_paragraph = samples_cell.add_paragraph()
+        type_paragraph.paragraph_format.space_after = Pt(4)
+        type_run = type_paragraph.add_run(
+            ("Type d’analyse : " if st.session_state.get("language", "fr") == "fr" else "Analysis type: ")
+            + analysis_type
+        )
+        type_run.bold = True
+        type_run.font.size = Pt(9)
+
+    analysis_details = form_data.get("analysis_details", "").strip()
+    if analysis_details:
+        details_paragraph = samples_cell.add_paragraph()
+        details_paragraph.paragraph_format.space_after = Pt(4)
+        details_run = details_paragraph.add_run(
+            ("Détails du développement spécifique : " if st.session_state.get("language", "fr") == "fr" else "Specific development details: ")
+            + analysis_details
+        )
+        details_run.font.size = Pt(9)
+
     samples = form_data.get("samples", "").strip()
     if samples:
         target = next((p for p in samples_cell.paragraphs if not p.text.strip()), None)
