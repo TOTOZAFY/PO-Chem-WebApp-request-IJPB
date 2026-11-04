@@ -15,7 +15,7 @@ from docx import Document
 from docx.shared import Pt
 
 st.set_page_config(
-    page_title="PO-Chem-WebApp-Request | Plateforme Observatoire du Végétal-Chimie-Métabolisme/IJPB-INRAE Versailles",
+    page_title="PO-Chem-WebApp-Request | Plateforme OV-Chimie-Métabolisme/IJPB-INRAE Versailles",
     page_icon="🧪",
     layout="wide",
 )
