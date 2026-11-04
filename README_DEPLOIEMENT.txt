@@ -73,3 +73,28 @@ Le suivi du personnel est désormais propre à chaque demande :
 - Elle reçoit également la notification lorsqu'une décision (acceptation/refus) est prise pour cette demande.
 - Aucun autre personnel ne reçoit ces notifications.
 - L'administrateur principal et son adresse secondaire en CC restent configurables dans l'espace administrateur.
+
+
+MISE À JOUR DE LA SECTION « INFORMATIONS GÉNÉRALES »
+---------------------------------------------------
+La section est désormais organisée en deux sous-sections :
+- Demandeur : responsable du projet, groupe/laboratoire, date, téléphone et e-mail du responsable.
+- Administrateur : adresse e-mail principale (affichée en lecture seule et gérée dans l'espace administrateur) et e-mail du personnel administratif facultatif.
+Le nom et le téléphone du personnel administratif ne sont plus demandés dans le formulaire.
+
+
+CORRECTION DE LA SECTION DEMANDEUR / ADMINISTRATEUR (version 1.3.4)
+-------------------------------------------------------------------
+Les informations « Personnel administratif du laboratoire », son numéro de téléphone
+et son e-mail facultatif appartiennent bien à la section Demandeur : elles décrivent
+le laboratoire du demandeur. L'adresse e-mail de l'administrateur de la plateforme
+reste seule dans la section Administrateur et est gérée depuis l'espace administrateur.
+Le personnel du laboratoire indiqué dans une demande reçoit uniquement les notifications
+relatives à cette demande.
+
+
+INTITULÉ DE LA SECTION PLATEFORME (version 1.3.5)
+-------------------------------------------------
+Le titre « Administrateur » est remplacé par :
+« Plateforme Observatoire du végétal chimie et métabolisme ».
+Le contenu de cette section reste limité à l'adresse e-mail de notification de la plateforme.

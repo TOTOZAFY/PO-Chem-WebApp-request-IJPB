@@ -33,10 +33,10 @@ TRANSLATIONS = {
         "À la dernière étape, votre demande sera enregistrée dans Nextcloud et l'administrateur sera notifié.",
         "steps": ["Contacts", "Description du projet", "Échantillons", "Résultats & bibliographie",
                   "Informations complémentaires", "Vérification & soumission"],
-        "general": "1. Informations générales", "manager": "Responsable du projet *",
+        "general": "1. Informations générales", "requester_section": "Demandeur", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Responsable du projet *",
         "group": "Groupe / laboratoire", "date": "Date", "phone": "Téléphone",
         "manager_email": "E-mail du responsable", "admin_staff": "Personnel administratif",
-        "admin_phone": "Téléphone du personnel administratif", "admin_email": "E-mail du personnel administratif",
+        "admin_phone": "Téléphone du personnel administratif", "admin_email": "E-mail du personnel administratif (facultatif)",
         "recommended": "* Champ obligatoire.", "description": "2. Description du projet",
         "description_help": "Questions scientifiques et techniques à traiter, molécules à analyser.",
         "description_field": "Description scientifique et technique",
@@ -91,10 +91,10 @@ TRANSLATIONS = {
         "At the final step, your request will be saved to Nextcloud and the administrator will be notified.",
         "steps": ["Contacts", "Project description", "Samples", "Preliminary results & bibliography",
                   "Additional information", "Review & submission"],
-        "general": "1. General information", "manager": "Project manager *",
+        "general": "1. General information", "requester_section": "Requester", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Project manager *",
         "group": "Group / laboratory", "date": "Date", "phone": "Telephone",
         "manager_email": "Project manager email", "admin_staff": "Administrative staff",
-        "admin_phone": "Administrative staff telephone", "admin_email": "Administrative staff email",
+        "admin_phone": "Administrative staff telephone", "admin_email": "Administrative staff email (optional)",
         "recommended": "* Required field.", "description": "2. Project description",
         "description_help": "Scientific and technical questions to be addressed, molecules to be analysed.",
         "description_field": "Scientific and technical description",
@@ -544,18 +544,33 @@ def render_form():
     with st.container(border=True):
         if step == 0:
             st.subheader(t("general"))
-            left, right = st.columns(2)
-            with left:
+            st.markdown(f"**{t('requester_section')}**")
+            requester_left, requester_right = st.columns(2)
+            with requester_left:
                 text_field("project_manager", t("manager"))
                 text_field("group", t("group"))
                 selected_date = st.date_input(t("date"), value=date.fromisoformat(data["date"]) if data.get("date") else date.today())
                 data["date"] = selected_date.isoformat()
                 text_field("manager_phone", t("phone"))
                 text_field("manager_email", t("manager_email"))
-            with right:
+            with requester_right:
                 text_field("admin_staff", t("admin_staff"))
                 text_field("admin_phone", t("admin_phone"))
                 text_field("admin_email", t("admin_email"))
+
+            st.divider()
+            st.markdown(f"**{t('administrator_section')}**")
+            try:
+                current_admin_email = load_notification_settings().get("admin_email", DEFAULT_ADMIN_EMAIL)
+            except Exception:
+                current_admin_email = DEFAULT_ADMIN_EMAIL
+            st.text_input(
+                t("admin_primary_email"),
+                value=current_admin_email,
+                disabled=True,
+                help="Adresse de notification gérée dans l'espace administrateur." if st.session_state.language == "fr"
+                else "Notification address managed in the administrator area.",
+            )
             st.caption(t("recommended"))
         elif step == 1:
             st.subheader(t("description"))
