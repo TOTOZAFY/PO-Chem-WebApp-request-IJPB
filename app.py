@@ -461,117 +461,196 @@ def render_admin():
             except Exception as exc:
                 st.error(f"{t('cloud_error')} {exc}")
 
-    st.divider()
-    statuses = [r.get("status", "pending") for r in records]
-    st.metric(t("total"), len(records))
-    c1, c2, c3 = st.columns(3)
-    c1.metric(t("pending"), statuses.count("pending"))
-    c2.metric(t("accepted"), statuses.count("accepted"))
-    c3.metric(t("refused"), statuses.count("refused"))
+    # Archived requests remain in the same Nextcloud metadata file; only their
+    # archived flag changes. This preserves existing records and compatibility.
+    active_records = [r for r in records if not r.get("archived", False)]
+    archived_records = [r for r in records if r.get("archived", False)]
 
-    st.subheader(t("by_status"))
-    status_labels = {
-        "pending": t("status_pending"), "accepted": t("status_accepted"), "refused": t("status_refused")
-    }
-    counts = {status_labels[k]: statuses.count(k) for k in status_labels}
-    st.bar_chart(counts)
+    active_tab, archive_tab = st.tabs([
+        "📋 Demandes actives" if st.session_state.language == "fr" else "📋 Active requests",
+        "🗄️ Archives" if st.session_state.language == "fr" else "🗄️ Archive",
+    ])
 
-    st.subheader(t("by_month"))
-    monthly = {}
-    for record in records:
-        month = str(record.get("submitted_at", ""))[:7]
-        if month:
-            monthly[month] = monthly.get(month, 0) + 1
-    if monthly:
-        st.bar_chart(dict(sorted(monthly.items())))
-    else:
-        st.caption(t("no_requests"))
+    with active_tab:
+        statuses = [r.get("status", "pending") for r in active_records]
+        st.metric(t("total"), len(active_records))
+        c1, c2, c3 = st.columns(3)
+        c1.metric(t("pending"), statuses.count("pending"))
+        c2.metric(t("accepted"), statuses.count("accepted"))
+        c3.metric(t("refused"), statuses.count("refused"))
 
-    st.subheader(t("yearly"))
-    yearly = {}
-    for record in records:
-        year = str(record.get("submitted_at", ""))[:4]
-        if year:
-            yearly[year] = yearly.get(year, 0) + 1
-    if yearly:
-        st.bar_chart(dict(sorted(yearly.items())))
+        st.subheader(t("by_status"))
+        status_labels = {
+            "pending": t("status_pending"), "accepted": t("status_accepted"), "refused": t("status_refused")
+        }
+        counts = {status_labels[k]: statuses.count(k) for k in status_labels}
+        st.bar_chart(counts)
 
-    # Export a flat administrative summary without including scientific descriptions.
-    import csv
-    from io import StringIO
-    csv_buffer = StringIO()
-    fields = ["id", "project_name", "project_manager", "manager_email", "group",
-              "request_date", "submitted_at", "status", "admin_comment", "document_path"]
-    writer = csv.DictWriter(csv_buffer, fieldnames=fields, extrasaction="ignore")
-    writer.writeheader()
-    writer.writerows(records)
-    st.download_button(
-        t("export_csv"),
-        data=csv_buffer.getvalue().encode("utf-8-sig"),
-        file_name="PO-Chem-WebApp-Request_statistics.csv",
-        mime="text/csv",
-    )
-
-    st.subheader(t("request_list"))
-    if not records:
-        st.info(t("no_requests"))
-        return
-    options = {
-        f"{r.get('project_name','(sans nom)')} — {r.get('project_manager','')} — {r.get('submitted_at','')[:10]}": r["id"]
-        for r in records
-    }
-    selected_label = st.selectbox(t("select_request"), list(options.keys()))
-    selected_id = options[selected_label]
-    record = next(r for r in records if r.get("id") == selected_id)
-    st.write(f"**{t('manager')} :** {record.get('project_manager','')}")
-    requester_email = record.get("manager_email", "").strip()
-    if requester_email:
-        st.markdown(f"**{t('manager_email')} :** [{requester_email}](mailto:{requester_email})")
-    else:
-        st.write(f"**{t('manager_email')} :** —")
-    st.write(f"**{t('group')} :** {record.get('group','')}")
-    st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
-    st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
-    status_options = ["pending", "accepted", "refused"]
-    status_display = [t("status_pending"), t("status_accepted"), t("status_refused")]
-    current_status = record.get("status", "pending")
-    current_index = status_options.index(current_status) if current_status in status_options else 0
-    with st.form("decision_form"):
-        new_status = st.selectbox(t("status"), status_options, index=current_index, format_func=lambda x: status_display[status_options.index(x)])
-        comment = st.text_area(t("comment"), value=record.get("admin_comment", ""))
-        save = st.form_submit_button(t("save_decision"))
-    if save:
-        record["status"] = new_status
-        record["admin_comment"] = comment.strip()
-        record["decision_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-        try:
-            save_metadata(records)
-        except Exception as exc:
-            st.error(f"{t('cloud_error')} {exc}")
-            return
-        email = record.get("manager_email", "").strip()
-        if new_status == "pending":
-            st.info(t("pending_no_notification"))
-        elif email:
-            try:
-                current_notification_settings = load_notification_settings()
-                send_email(
-                    email,
-                    t("mail_user_subject"),
-                    t("mail_user_body").format(
-                        manager=record.get("project_manager", ""),
-                        project=record.get("project_name", ""),
-                        status=status_display[status_options.index(new_status)],
-                        comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
-                    ),
-                    cc=join_email_recipients(record.get("admin_email", ""), record.get("platform_staff_email", "")),
-                )
-                st.success(t("decision_saved"))
-            except Exception as exc:
-                st.warning(f"{t('decision_saved_no_mail')} {exc}")
+        st.subheader(t("by_month"))
+        monthly = {}
+        for item in active_records:
+            month = str(item.get("submitted_at", ""))[:7]
+            if month:
+                monthly[month] = monthly.get(month, 0) + 1
+        if monthly:
+            st.bar_chart(dict(sorted(monthly.items())))
         else:
-            st.warning(t("select_email_missing"))
-        st.rerun()
+            st.caption(t("no_requests"))
+
+        st.subheader(t("yearly"))
+        yearly = {}
+        for item in active_records:
+            year = str(item.get("submitted_at", ""))[:4]
+            if year:
+                yearly[year] = yearly.get(year, 0) + 1
+        if yearly:
+            st.bar_chart(dict(sorted(yearly.items())))
+
+        import csv
+        from io import StringIO
+        csv_buffer = StringIO()
+        fields = ["id", "project_name", "project_manager", "manager_email", "group",
+                  "request_date", "submitted_at", "status", "admin_comment", "document_path"]
+        writer = csv.DictWriter(csv_buffer, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(active_records)
+        st.download_button(
+            t("export_csv"),
+            data=csv_buffer.getvalue().encode("utf-8-sig"),
+            file_name="PO-Chem-WebApp-Request_statistics.csv",
+            mime="text/csv",
+        )
+
+        st.subheader(t("request_list"))
+        if not active_records:
+            st.info(t("no_requests"))
+        else:
+            options = {
+                f"{r.get('project_name','(sans nom)')} — {r.get('project_manager','')} — {str(r.get('submitted_at',''))[:10]}": r["id"]
+                for r in active_records
+            }
+            selected_label = st.selectbox(t("select_request"), list(options.keys()), key="active_request_select")
+            selected_id = options[selected_label]
+            record = next(r for r in active_records if r.get("id") == selected_id)
+            st.write(f"**{t('manager')} :** {record.get('project_manager','')}")
+            requester_email = record.get("manager_email", "").strip()
+            if requester_email:
+                st.markdown(f"**{t('manager_email')} :** [{requester_email}](mailto:{requester_email})")
+            else:
+                st.write(f"**{t('manager_email')} :** —")
+            st.write(f"**{t('group')} :** {record.get('group','')}")
+            st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
+            st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
+            status_options = ["pending", "accepted", "refused"]
+            status_display = [t("status_pending"), t("status_accepted"), t("status_refused")]
+            current_status = record.get("status", "pending")
+            current_index = status_options.index(current_status) if current_status in status_options else 0
+            with st.form("decision_form"):
+                new_status = st.selectbox(t("status"), status_options, index=current_index,
+                    format_func=lambda x: status_display[status_options.index(x)])
+                comment = st.text_area(t("comment"), value=record.get("admin_comment", ""))
+                save = st.form_submit_button(t("save_decision"))
+            if save:
+                record["status"] = new_status
+                record["admin_comment"] = comment.strip()
+                record["decision_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                try:
+                    save_metadata(records)
+                except Exception as exc:
+                    st.error(f"{t('cloud_error')} {exc}")
+                    return
+                email = record.get("manager_email", "").strip()
+                if new_status == "pending":
+                    st.info(t("pending_no_notification"))
+                elif email:
+                    try:
+                        send_email(
+                            email, t("mail_user_subject"),
+                            t("mail_user_body").format(
+                                manager=record.get("project_manager", ""),
+                                project=record.get("project_name", ""),
+                                status=status_display[status_options.index(new_status)],
+                                comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
+                            ),
+                            cc=join_email_recipients(record.get("admin_email", ""), record.get("platform_staff_email", "")),
+                        )
+                        st.success(t("decision_saved"))
+                    except Exception as exc:
+                        st.warning(f"{t('decision_saved_no_mail')} {exc}")
+                else:
+                    st.warning(t("select_email_missing"))
+                st.rerun()
+
+            st.divider()
+            archive_label = "Archiver cette demande" if st.session_state.language == "fr" else "Archive this request"
+            if st.button("🗄️ " + archive_label, key=f"archive_{selected_id}"):
+                record["archived"] = True
+                record["archived_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                try:
+                    save_metadata(records)
+                    st.success("Demande déplacée dans les archives." if st.session_state.language == "fr" else "Request moved to archive.")
+                    st.rerun()
+                except Exception as exc:
+                    record.pop("archived", None)
+                    record.pop("archived_at", None)
+                    st.error(f"{t('cloud_error')} {exc}")
+
+    with archive_tab:
+        st.metric("Demandes archivées" if st.session_state.language == "fr" else "Archived requests", len(archived_records))
+        if not archived_records:
+            st.info("Aucune demande archivée." if st.session_state.language == "fr" else "No archived requests.")
+        else:
+            archive_options = {
+                f"{r.get('project_name','(sans nom)')} — {r.get('project_manager','')} — {str(r.get('submitted_at',''))[:10]}": r["id"]
+                for r in archived_records
+            }
+            archive_label = st.selectbox(
+                "Sélectionner une demande archivée" if st.session_state.language == "fr" else "Select an archived request",
+                list(archive_options.keys()), key="archived_request_select"
+            )
+            archived_id = archive_options[archive_label]
+            archived_record = next(r for r in archived_records if r.get("id") == archived_id)
+            st.write(f"**{t('manager')} :** {archived_record.get('project_manager','')}")
+            archived_email = archived_record.get("manager_email", "").strip()
+            if archived_email:
+                st.markdown(f"**{t('manager_email')} :** [{archived_email}](mailto:{archived_email})")
+            st.write(f"**{t('group')} :** {archived_record.get('group','')}")
+            st.write(f"**{t('project_name')} :** {archived_record.get('project_name','')}")
+            st.write(f"**{t('status')} :** {archived_record.get('status','pending')}")
+            st.write(f"**Archivée le :** {archived_record.get('archived_at','—')}" if st.session_state.language == "fr" else f"**Archived on:** {archived_record.get('archived_at','—')}")
+            st.write(f"**{t('doc_path')} :** `{archived_record.get('document_path','')}`")
+
+            restore_label = "Restaurer dans les demandes actives" if st.session_state.language == "fr" else "Restore to active requests"
+            if st.button("↩️ " + restore_label, key=f"restore_{archived_id}"):
+                archived_record.pop("archived", None)
+                archived_record.pop("archived_at", None)
+                try:
+                    save_metadata(records)
+                    st.success("Demande restaurée." if st.session_state.language == "fr" else "Request restored.")
+                    st.rerun()
+                except Exception as exc:
+                    archived_record["archived"] = True
+                    st.error(f"{t('cloud_error')} {exc}")
+
+            st.divider()
+            confirm_label = "Je confirme la suppression définitive" if st.session_state.language == "fr" else "I confirm permanent deletion"
+            delete_label = "Supprimer définitivement" if st.session_state.language == "fr" else "Delete permanently"
+            confirmed = st.checkbox(confirm_label, key=f"confirm_delete_{archived_id}")
+            if st.button("🗑️ " + delete_label, type="primary", disabled=not confirmed, key=f"delete_{archived_id}"):
+                document_path = archived_record.get("document_path", "")
+                try:
+                    # Delete the associated Word document first. Keep the metadata
+                    # untouched if Nextcloud reports a real deletion error.
+                    if document_path:
+                        delete_response = webdav_request("DELETE", document_path)
+                        if delete_response.status_code not in (200, 202, 204, 404):
+                            delete_response.raise_for_status()
+                    records = [r for r in records if r.get("id") != archived_id]
+                    save_metadata(records)
+                    st.success("Demande et document supprimés définitivement." if st.session_state.language == "fr" else "Request and document permanently deleted.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Suppression impossible : {exc}" if st.session_state.language == "fr" else f"Deletion failed: {exc}")
 
 def render_form():
     if not os.path.isfile(TEMPLATE_PATH):
