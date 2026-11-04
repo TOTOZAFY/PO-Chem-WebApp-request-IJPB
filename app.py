@@ -15,7 +15,7 @@ from docx import Document
 from docx.shared import Pt
 
 st.set_page_config(
-    page_title="PO-Chem-WebApp-Request | Plateforme OV-Chimie-Métabolisme/IJPB-INRAE Versailles",
+    page_title="PO-Chem-WebApp-Request | OV-Chimie-Métabolisme",
     page_icon="🧪",
     layout="wide",
 )
@@ -55,7 +55,8 @@ TRANSLATIONS = {
         "previous": "← Précédent", "next": "Suivant →", "edit": "← Modifier les réponses",
         "required": "Renseignez au minimum le responsable, son e-mail et le nom du projet.",
         "submit": "Valider et soumettre la demande", "download": "Télécharger le document Word",
-        "submitted": "Demande enregistrée dans Nextcloud. L'administrateur a été notifié.",
+        "submitted": "Demande enregistrée dans Nextcloud.",
+        "submitted_notified": "Demande enregistrée dans Nextcloud. La notification à l’administrateur a bien été envoyée.",
         "cloud_error": "Le dépôt dans Nextcloud a échoué. La demande n'a pas été enregistrée :",
         "mail_warning": "Le document est enregistré, mais la notification à l'administrateur n'a pas pu être envoyée :",
         "cloud_not_configured": "La connexion Nextcloud n'est pas configurée dans les secrets Streamlit.",
@@ -83,7 +84,7 @@ TRANSLATIONS = {
         "mail_admin_subject": "Nouvelle demande E-GES-01 reçue",
         "mail_user_subject": "Mise à jour de votre demande E-GES-01",
         "mail_admin_body": "Une nouvelle demande E-GES-01 a été soumise.\nProjet : {project}\nResponsable : {manager}\nGroupe : {group}\nDocument stocké dans Nextcloud : {path}",
-        "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\n",
+        "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\nOV-Chimie-Métabolisme",
         "back_form": "Retour au formulaire",
         "platform_contact_email": "E-mail de contact de la plateforme",
         "platform_contact_help": "Cette adresse reçoit les nouvelles demandes. Elle est modifiable dans l'espace de gestion de la plateforme.",
@@ -143,7 +144,8 @@ TRANSLATIONS = {
         "previous": "← Previous", "next": "Next →", "edit": "← Edit answers",
         "required": "Please provide at least the project manager, their email address and the project name.",
         "submit": "Submit request", "download": "Download Word document",
-        "submitted": "Request saved to Nextcloud. The administrator has been notified.",
+        "submitted": "Request saved to Nextcloud.",
+        "submitted_notified": "Request saved to Nextcloud. The administrator notification was sent successfully.",
         "cloud_error": "Uploading to Nextcloud failed. The request was not saved:",
         "mail_warning": "The document was saved, but the administrator notification could not be sent:",
         "cloud_not_configured": "Nextcloud connection is not configured in Streamlit secrets.",
@@ -673,7 +675,7 @@ def render_form():
         .hero h1 {margin: 0; color: #183b56; font-size: 1.8rem;}
         .hero p {margin: .4rem 0 0; color: #526575;}
         </style>
-        <div class="hero"><h1>Plateforme OV-Chimie-Métabolisme/IJPB-INRAE Versailles</h1>
+        <div class="hero"><h1>OV-Chimie-Métabolisme</h1>
         <p>PO-Chem-WebApp-Request — E-GES-01</p></div>
         """,
         unsafe_allow_html=True,
@@ -846,10 +848,9 @@ def render_form():
                                     cc=internal_cc,
                                     reply_to=record.get("manager_email", "").strip() or None,
                                 )
-                                st.success(t("submitted"))
+                                st.success(t("submitted_notified"))
                             except Exception as mail_exc:
                                 st.warning(f"{t('mail_warning')} {mail_exc}")
-                                st.success(t("submitted"))
                         except Exception as exc:
                             st.error(f"{t('cloud_error')} {exc}")
 
