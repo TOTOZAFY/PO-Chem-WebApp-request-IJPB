@@ -98,3 +98,29 @@ INTITULÉ DE LA SECTION PLATEFORME (version 1.3.5)
 Le titre « Administrateur » est remplacé par :
 « Plateforme Observatoire du végétal chimie et métabolisme ».
 Le contenu de cette section reste limité à l'adresse e-mail de notification de la plateforme.
+
+
+CORRECTION AFFICHAGE DE L'ADRESSE DE LA PLATEFORME (version 1.3.6)
+------------------------------------------------------------------
+La section « Plateforme Observatoire du végétal chimie et métabolisme »
+affiche désormais explicitement le champ « E-mail de contact de la plateforme ».
+Le champ est en lecture seule dans le formulaire public ; l'adresse reste modifiable
+depuis l'espace administrateur et reçoit les notifications de nouvelles demandes.
+
+
+AJOUT DU CONTACT PERSONNEL DE LA PLATEFORME (version 1.3.7)
+-----------------------------------------------------------
+Sous l'adresse de contact principale de la plateforme, un champ facultatif
+« E-mail du personnel de la plateforme » est disponible pour chaque demande.
+S'il est renseigné, ce contact reçoit uniquement les notifications relatives
+à cette demande (nouvelle demande et décision). Il est distinct du personnel
+administratif du laboratoire du demandeur, qui reste dans la section Demandeur.
+
+
+TRADUCTION FRANÇAIS / ANGLAIS (version 1.3.8)
+---------------------------------------------
+L'interface sélectionnée via le sélecteur de langue est harmonisée en français et en anglais :
+formulaire, intitulés, aides, messages d'erreur, validation, espace administrateur,
+statistiques, export et récapitulatif des réponses. Le nom officiel « Plateforme
+Observatoire du végétal chimie et métabolisme » reste volontairement en français.
+Le modèle Word officiel conserve son texte d'origine.

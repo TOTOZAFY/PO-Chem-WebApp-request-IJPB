@@ -67,6 +67,7 @@ TRANSLATIONS = {
         "request_list": "Gestion des demandes", "no_requests": "Aucune demande enregistrée.",
         "notification_settings": "Configuration des notifications e-mail",
         "admin_primary_email": "E-mail principal de l’administrateur",
+        "platform_staff_email": "E-mail du personnel de la plateforme (facultatif)",
         "admin_secondary_email": "E-mail secondaire de l’administrateur (CC, facultatif)",
         "save_notification_settings": "Enregistrer les adresses e-mail",
         "notification_settings_saved": "Adresses de notification enregistrées dans Nextcloud.",
@@ -84,6 +85,35 @@ TRANSLATIONS = {
         "mail_admin_body": "Une nouvelle demande E-GES-01 a été soumise.\nProjet : {project}\nResponsable : {manager}\nGroupe : {group}\nDocument stocké dans Nextcloud : {path}",
         "mail_user_body": "Bonjour {manager},\n\nLa demande concernant le projet « {project} » a été mise à jour.\nDécision : {status}\nCommentaire : {comment}\n\nCordialement,\nOV-Chimie-Métabolisme",
         "back_form": "Retour au formulaire",
+        "platform_contact_email": "E-mail de contact de la plateforme",
+        "platform_contact_help": "Cette adresse reçoit les nouvelles demandes. Elle est modifiable dans l'espace de gestion de la plateforme.",
+        "platform_contact_caption": "Adresse de notification de la plateforme — affichée ici à titre informatif.",
+        "yearly": "Demandes par année",
+        "export_csv": "Exporter les statistiques (CSV)",
+        "required_admin_email": "L'adresse e-mail principale de la plateforme est obligatoire.",
+        "pending_no_notification": "Statut conservé en attente : aucune notification n'est envoyée au demandeur.",
+        "template_missing": "Le modèle Word template_E-GES-01.docx est introuvable.",
+        "word_generation_error": "Erreur de génération Word :",
+        "metadata_invalid": "Le fichier de métadonnées Nextcloud n'est pas un JSON valide.",
+        "notification_settings_invalid": "Le fichier de configuration des notifications est invalide.",
+        "smtp_not_configured": "SMTP n'est pas configuré dans les secrets Streamlit.",
+        "bibliography_prefix": "Bibliographie / Bibliography:",
+        "answer_prefix": "Réponse / Answer:",
+        "project_manager_short": "Responsable du projet",
+        "project_group_short": "Groupe / laboratoire",
+        "project_date_short": "Date",
+        "project_manager_email_short": "E-mail du responsable",
+        "project_staff_short": "Personnel administratif du laboratoire",
+        "project_staff_phone_short": "Téléphone du personnel administratif du laboratoire",
+        "project_staff_email_short": "E-mail du personnel administratif du laboratoire",
+        "platform_staff_email_short": "E-mail du personnel de la plateforme",
+        "project_description_short": "Description du projet",
+        "samples_short": "Échantillons",
+        "preliminary_short": "Résultats préliminaires",
+        "bibliography_short": "Bibliographie",
+        "project_name_short": "Nom du projet",
+        "funding_short": "Financement",
+        "guidance_short": "Accompagnement scientifique",
     },
     "en": {
         "language": "Language / Langue", "form": "Request form",
@@ -125,6 +155,7 @@ TRANSLATIONS = {
         "request_list": "Request management", "no_requests": "No requests have been recorded.",
         "notification_settings": "Email notification settings",
         "admin_primary_email": "Administrator primary email",
+        "platform_staff_email": "Platform staff email (optional)",
         "admin_secondary_email": "Administrator secondary email (CC, optional)",
         "save_notification_settings": "Save email addresses",
         "notification_settings_saved": "Notification addresses saved to Nextcloud.",
@@ -142,6 +173,35 @@ TRANSLATIONS = {
         "mail_admin_body": "A new E-GES-01 request has been submitted.\nProject: {project}\nManager: {manager}\nGroup: {group}\nDocument stored in Nextcloud: {path}",
         "mail_user_body": "Hello {manager},\n\nThe request for project “{project}” has been updated.\nDecision: {status}\nComment: {comment}\n\nBest regards,\nOV-Chimie-Métabolisme",
         "back_form": "Back to request form",
+        "platform_contact_email": "Platform contact email",
+        "platform_contact_help": "This address receives new requests. It can be changed in the platform management area.",
+        "platform_contact_caption": "Platform notification address — displayed here for information.",
+        "yearly": "Requests per year",
+        "export_csv": "Export statistics (CSV)",
+        "required_admin_email": "The platform primary email address is required.",
+        "pending_no_notification": "Status remains pending: no notification is sent to the requester.",
+        "template_missing": "The Word template template_E-GES-01.docx could not be found.",
+        "word_generation_error": "Word generation error:",
+        "metadata_invalid": "The Nextcloud metadata file is not valid JSON.",
+        "notification_settings_invalid": "The notification settings file is invalid.",
+        "smtp_not_configured": "SMTP is not configured in Streamlit secrets.",
+        "bibliography_prefix": "Bibliography:",
+        "answer_prefix": "Answer:",
+        "project_manager_short": "Project manager",
+        "project_group_short": "Group / laboratory",
+        "project_date_short": "Date",
+        "project_manager_email_short": "Project manager email",
+        "project_staff_short": "Laboratory administrative staff",
+        "project_staff_phone_short": "Laboratory administrative staff telephone",
+        "project_staff_email_short": "Laboratory administrative staff email",
+        "platform_staff_email_short": "Platform staff email",
+        "project_description_short": "Project description",
+        "samples_short": "Samples",
+        "preliminary_short": "Preliminary results",
+        "bibliography_short": "Bibliography",
+        "project_name_short": "Project name",
+        "funding_short": "Funding",
+        "guidance_short": "Scientific guidance",
     },
 }
 
@@ -197,7 +257,7 @@ def load_metadata():
         payload = response.json()
         return payload if isinstance(payload, list) else []
     except ValueError:
-        raise RuntimeError("Le fichier de métadonnées Nextcloud n'est pas un JSON valide.")
+        raise RuntimeError(t("metadata_invalid"))
 
 def save_metadata(records):
     response = webdav_request(
@@ -219,7 +279,7 @@ def load_notification_settings():
     response.raise_for_status()
     settings = response.json()
     if not isinstance(settings, dict):
-        raise RuntimeError("Le fichier de configuration des notifications est invalide.")
+        raise RuntimeError(t("notification_settings_invalid"))
     return {
         "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
         "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
@@ -248,7 +308,7 @@ def join_email_recipients(*addresses):
 def send_email(to_address, subject, body, cc=None, reply_to=None):
     cfg = get_secret("smtp", {})
     if not cfg or not all(cfg.get(k) for k in ("host", "username", "password", "sender")):
-        raise RuntimeError("SMTP n'est pas configuré dans les secrets Streamlit.")
+        raise RuntimeError(t("smtp_not_configured"))
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = cfg["sender"]
@@ -315,13 +375,13 @@ def build_document(form_data):
     add_value(results_cell, form_data.get("preliminary", ""))
     bibliography = form_data.get("bibliography", "").strip()
     if bibliography:
-        add_value(results_cell, "Bibliographie / Bibliography: " + bibliography)
+        add_value(results_cell, t("bibliography_prefix") + " " + bibliography)
 
     project_cell = table.cell(6, 0)
     add_to_existing_paragraph(project_cell.paragraphs[0], form_data.get("project_name"), bold=True)
-    add_to_existing_paragraph(project_cell.paragraphs[1], f"Réponse / Answer: {form_data.get('funding', 'NO')}", bold=True)
+    add_to_existing_paragraph(project_cell.paragraphs[1], f"{t('answer_prefix')} {form_data.get('funding', 'NO')}", bold=True)
     guidance_cell = table.cell(7, 0)
-    add_to_existing_paragraph(guidance_cell.paragraphs[0], f"Réponse / Answer: {form_data.get('guidance', 'NO')}", bold=True)
+    add_to_existing_paragraph(guidance_cell.paragraphs[0], f"{t('answer_prefix')} {form_data.get('guidance', 'NO')}", bold=True)
 
     ref_name = re.sub(r"[^A-Za-z0-9]+", "_", form_data.get("project_manager", "NOM")).strip("_").upper() or "NOM"
     reference = f"E-GES-01_{date.today().strftime('%d%m%y')}_{ref_name}"
@@ -382,7 +442,7 @@ def render_admin():
         save_recipients = st.form_submit_button(t("save_notification_settings"))
     if save_recipients:
         if not admin_primary.strip():
-            st.error("L'adresse e-mail principale de l'administrateur est obligatoire.")
+            st.error(t("required_admin_email"))
         else:
             try:
                 save_notification_settings({
@@ -420,7 +480,7 @@ def render_admin():
     else:
         st.caption(t("no_requests"))
 
-    st.subheader("Demandes par année / Requests per year")
+    st.subheader(t("yearly"))
     yearly = {}
     for record in records:
         year = str(record.get("submitted_at", ""))[:4]
@@ -439,7 +499,7 @@ def render_admin():
     writer.writeheader()
     writer.writerows(records)
     st.download_button(
-        "Exporter les statistiques / Export statistics (CSV)",
+        t("export_csv"),
         data=csv_buffer.getvalue().encode("utf-8-sig"),
         file_name="PO-Chem-WebApp-Request_statistics.csv",
         mime="text/csv",
@@ -484,7 +544,7 @@ def render_admin():
             return
         email = record.get("manager_email", "").strip()
         if new_status == "pending":
-            st.info("Statut conservé en attente : aucune notification n'est envoyée au demandeur.")
+            st.info(t("pending_no_notification"))
         elif email:
             try:
                 current_notification_settings = load_notification_settings()
@@ -497,7 +557,7 @@ def render_admin():
                         status=status_display[status_options.index(new_status)],
                         comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
                     ),
-                    cc=join_email_recipients(record.get("admin_email", "")),
+                    cc=join_email_recipients(record.get("admin_email", ""), record.get("platform_staff_email", "")),
                 )
                 st.success(t("decision_saved"))
             except Exception as exc:
@@ -508,7 +568,7 @@ def render_admin():
 
 def render_form():
     if not os.path.isfile(TEMPLATE_PATH):
-        st.error("Le modèle Word template_E-GES-01.docx est introuvable.")
+        st.error(t("template_missing"))
         st.stop()
     if "step" not in st.session_state:
         st.session_state.step = 0
@@ -565,12 +625,16 @@ def render_form():
             except Exception:
                 current_admin_email = DEFAULT_ADMIN_EMAIL
             st.text_input(
-                t("admin_primary_email"),
+                t("platform_contact_email"),
                 value=current_admin_email,
+                key="platform_admin_email_display",
                 disabled=True,
-                help="Adresse de notification gérée dans l'espace administrateur." if st.session_state.language == "fr"
-                else "Notification address managed in the administrator area.",
+                help=t("platform_contact_help"),
             )
+            st.caption(
+                t("platform_contact_caption")
+            )
+            text_field("platform_staff_email", t("platform_staff_email"))
             st.caption(t("recommended"))
         elif step == 1:
             st.subheader(t("description"))
@@ -607,8 +671,26 @@ def render_form():
             for label, value in summary:
                 st.markdown(f"**{label} :** {value or '—'}")
             with st.expander(t("all_answers")):
+                answer_labels = {
+                    "project_manager": t("project_manager_short"),
+                    "group": t("project_group_short"),
+                    "date": t("project_date_short"),
+                    "manager_phone": t("phone"),
+                    "manager_email": t("project_manager_email_short"),
+                    "admin_staff": t("project_staff_short"),
+                    "admin_phone": t("project_staff_phone_short"),
+                    "admin_email": t("project_staff_email_short"),
+                    "platform_staff_email": t("platform_staff_email_short"),
+                    "project_description": t("project_description_short"),
+                    "samples": t("samples_short"),
+                    "preliminary": t("preliminary_short"),
+                    "bibliography": t("bibliography_short"),
+                    "project_name": t("project_name_short"),
+                    "funding": t("funding_short"),
+                    "guidance": t("guidance_short"),
+                }
                 for key, value in data.items():
-                    st.markdown(f"**{key.replace('_', ' ').capitalize()} :** {value}")
+                    st.markdown(f"**{answer_labels.get(key, key.replace('_', ' ').capitalize())} :** {value}")
             if not data.get("project_manager") or not data.get("project_name") or not data.get("manager_email"):
                 st.warning(t("required"))
             else:
@@ -620,7 +702,7 @@ def render_form():
                         use_container_width=True,
                     )
                 except Exception as exc:
-                    st.error(f"Erreur de génération Word : {exc}")
+                    st.error(f"{t('word_generation_error')} {exc}")
                     document_bytes, filename = None, None
                 if document_bytes is not None:
                     if st.button(t("submit"), type="primary", use_container_width=True):
@@ -638,6 +720,10 @@ def render_form():
                                 "project_name": data.get("project_name", ""),
                                 "project_manager": data.get("project_manager", ""),
                                 "manager_email": data.get("manager_email", ""),
+                                "admin_staff": data.get("admin_staff", ""),
+                                "admin_phone": data.get("admin_phone", ""),
+                                "admin_email": data.get("admin_email", ""),
+                                "platform_staff_email": data.get("platform_staff_email", ""),
                                 "group": data.get("group", ""),
                                 "request_date": data.get("date", ""),
                                 "submitted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -660,6 +746,7 @@ def render_form():
                                 internal_cc = join_email_recipients(
                                     recipients.get("admin_cc_email"),
                                     record.get("admin_email", ""),
+                                    record.get("platform_staff_email", ""),
                                 )
                                 send_email(
                                     admin_email,
