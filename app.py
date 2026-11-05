@@ -13,6 +13,10 @@ import requests
 import streamlit as st
 from docx import Document
 from docx.shared import Pt
+from openpyxl import load_workbook
+from openpyxl.cell.cell import MergedCell
+from openpyxl.utils import get_column_letter
+import csv
 
 st.set_page_config(
     page_title="PO-Chem-WebApp-Request | OV-Chimie-Métabolisme",
@@ -22,9 +26,11 @@ st.set_page_config(
 
 APP_NAME = "PO-Chem-WebApp-Request"
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template_E-GES-01.docx")
+FAIR_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "FAIR_template.xlsx")
 CLOUD_FOLDER = "MyDrive/Demandes_Analyses"
 METADATA_PATH = "MyDrive/demandes_metadata.json"
 NOTIFICATION_SETTINGS_PATH = "MyDrive/notification_settings.json"
+FAIR_FOLDER = CLOUD_FOLDER
 DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
 ANALYSIS_TYPES = [
     "Métabolites primaires par GC-MS",
@@ -514,6 +520,215 @@ def build_document(form_data):
     output.seek(0)
     return output.getvalue(), reference + ".docx"
 
+def fair_filename(record):
+    """Keep the request document stem and append the FAIR suffix."""
+    stem = os.path.splitext(record.get("filename", record.get("id", "request")))[0]
+    return f"{stem}_FAIR.xlsx"
+
+
+def fair_remote_path(record):
+    return f"{FAIR_FOLDER}/{fair_filename(record)}"
+
+
+def create_fair_workbook(record):
+    if not os.path.isfile(FAIR_TEMPLATE_PATH):
+        raise FileNotFoundError("FAIR_template.xlsx is missing")
+    wb = load_workbook(FAIR_TEMPLATE_PATH)
+    ws = wb["Sample"]
+    # Clear example values while retaining the original layout, labels and styles.
+    for row in range(1, ws.max_row + 1):
+        for col in range(2, ws.max_column + 1):
+            if ws.cell(row, 1).value is not None and not isinstance(ws.cell(row, col), MergedCell):
+                ws.cell(row, col).value = None
+    ws["B1"] = record.get("project_name", "")
+    ws["B2"] = (record.get("submitted_at", "") or record.get("request_date", ""))[:10]
+    ws["B3"] = record.get("id", "")
+    ws["B4"] = record.get("analysis_type", "")
+    output = BytesIO()
+    wb.save(output)
+    return output.getvalue()
+
+
+def load_fair_workbook(record):
+    path = record.get("fair_path") or fair_remote_path(record)
+    response = webdav_request("GET", path)
+    if response.status_code == 404:
+        payload = create_fair_workbook(record)
+        upload = webdav_request("PUT", path, data=payload)
+        upload.raise_for_status()
+        record["fair_path"] = path
+        return load_workbook(BytesIO(payload))
+    response.raise_for_status()
+    return load_workbook(BytesIO(response.content))
+
+
+def save_fair_workbook(record, workbook):
+    output = BytesIO()
+    workbook.save(output)
+    path = record.get("fair_path") or fair_remote_path(record)
+    response = webdav_request("PUT", path, data=output.getvalue())
+    response.raise_for_status()
+    record["fair_path"] = path
+    record["fair_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def sample_rows(ws):
+    return {str(ws.cell(r, 1).value).strip(): r for r in range(1, ws.max_row + 1)
+            if ws.cell(r, 1).value is not None and str(ws.cell(r, 1).value).strip()}
+
+
+def fair_merge_samples(ws, incoming, requester=True):
+    """Merge sample dictionaries by tube ID; never replace admin-owned fields from requester imports."""
+    rows = sample_rows(ws)
+    id_row = rows.get("ID tube analyse")
+    if not id_row:
+        raise ValueError("The Sample sheet has no 'ID tube analyse' row.")
+    admin_only = {"File ID Q-Tof ESI+", "File ID Q-Tof ESI-"}
+    existing = {}
+    for col in range(2, ws.max_column + 1):
+        tube = ws.cell(id_row, col).value
+        if tube is not None and str(tube).strip():
+            existing[str(tube).strip()] = col
+    seen = set()
+    for sample in incoming:
+        tube = str(sample.get("ID tube analyse", "")).strip()
+        if not tube:
+            raise ValueError("Each sample must have an ID tube analyse.")
+        if tube in seen:
+            raise ValueError(f"Duplicate tube ID in imported data: {tube}")
+        seen.add(tube)
+        col = existing.get(tube)
+        if col is None:
+            col = next((candidate for candidate in range(2, ws.max_column + 1)
+                        if ws.cell(id_row, candidate).value in (None, "")), ws.max_column + 1)
+            existing[tube] = col
+        for field, value in sample.items():
+            field = str(field).strip()
+            if not field or value is None or str(value).strip() == "":
+                continue
+            if requester and field in admin_only:
+                continue
+            row = rows.get(field)
+            if row is None:
+                row = ws.max_row + 1
+                ws.cell(row, 1).value = field
+                rows[field] = row
+            ws.cell(row, col).value = value
+    return len(incoming)
+
+
+def parse_sample_upload(upload):
+    name = upload.name.lower()
+    if name.endswith((".xlsx", ".xlsm")):
+        wb = load_workbook(BytesIO(upload.getvalue()), data_only=True)
+        ws = wb[wb.sheetnames[0]]
+        # Accepted layout: metadata names in column A, samples in columns B+.
+        labels = [str(ws.cell(r, 1).value).strip() if ws.cell(r, 1).value is not None else ""
+                  for r in range(1, ws.max_row + 1)]
+        id_index = next((i for i, x in enumerate(labels, 1) if x == "ID tube analyse"), None)
+        if id_index is None:
+            # Also accept a conventional table with headers in row 1.
+            headers = [str(ws.cell(1, c).value).strip() if ws.cell(1, c).value is not None else ""
+                       for c in range(1, ws.max_column + 1)]
+            if "ID tube analyse" not in headers:
+                raise ValueError("Missing 'ID tube analyse' field.")
+            return [{headers[c-1]: ws.cell(r, c).value for c in range(1, len(headers)+1) if headers[c-1]}
+                    for r in range(2, ws.max_row+1) if any(ws.cell(r,c).value is not None for c in range(1,len(headers)+1))]
+        samples=[]
+        aliases = {"File ID Q-Tof ESI−": "File ID Q-Tof ESI-"}
+        for col in range(2, ws.max_column+1):
+            item={}
+            for row, label in enumerate(labels, 1):
+                if label:
+                    item[aliases.get(label, label)]=ws.cell(row,col).value
+            if any(v is not None and str(v).strip() for v in item.values()): samples.append(item)
+        return samples
+    # CSV/TSV in conventional row-per-sample format.
+    text_data = upload.getvalue().decode("utf-8-sig")
+    dialect = csv.Sniffer().sniff(text_data[:4096], delimiters=";,\t")
+    reader = csv.DictReader(text_data.splitlines(), dialect=dialect)
+    aliases = {"File ID Q-Tof ESI−": "File ID Q-Tof ESI-"}
+    return [{aliases.get(k, k): v for k, v in row.items() if k} for row in reader if any(v and v.strip() for v in row.values())]
+
+
+def render_fair_requester(record, records):
+    fr = st.session_state.get("language", "fr") == "fr"
+    title = "FAIR – Métadonnées des échantillons" if fr else "FAIR – Sample metadata"
+    st.title(title)
+    st.caption(("Demande : " if fr else "Request: ") + record.get("id", ""))
+    try:
+        wb = load_fair_workbook(record)
+        ws = wb["Sample"]
+        rows = sample_rows(ws)
+        # Requester-owned general field and sample metadata form.
+        st.subheader("1. " + ("Informations générales" if fr else "General information"))
+        current_collection = ws.cell(rows.get("Plant Collection", 7), 2).value or ""
+        collection = st.text_area("Plant Collection", value=str(current_collection), height=130)
+        st.subheader("2. " + ("Métadonnées des échantillons" if fr else "Sample metadata"))
+        warning = ("Le modèle de métadonnées est fourni à titre d'exemple. Veuillez adapter les champs à votre expérience. Vous pouvez ajouter des lignes pour toute information expérimentale supplémentaire et laisser vides les rubriques non applicables. Conservez les intitulés standards utilisés pour la correspondance automatique." if fr else "The provided metadata template is an example. Please adapt the metadata fields to your own experiment: keep the fields that are relevant, add rows for any additional experimental information, and leave non-applicable fields blank. Do not change the standard field names where they are used for automatic matching.")
+        st.info(warning)
+        mode = st.radio("Mode de saisie" if fr else "Entry method", [
+            "Formulaire web" if fr else "Web form",
+            "Import Excel/CSV", "Tableau interactif" if fr else "Interactive table",
+            "Télécharger le modèle FAIR" if fr else "Download FAIR template"], horizontal=False)
+        if mode in ("Formulaire web", "Web form"):
+            n = st.number_input("Nombre d'échantillons à saisir" if fr else "Number of samples", min_value=1, max_value=500, value=1, step=1)
+            for i in range(int(n)):
+                with st.expander(("Échantillon " if fr else "Sample ") + str(i+1), expanded=(i==0)):
+                    vals={}
+                    for field in rows:
+                        if field in {"Metadata", "File ID Q-Tof ESI+", "File ID Q-Tof ESI-", "Name of the experiment", "Date of the request", "N° saved file", "Type of analysis", "Plant Collection"}:
+                            continue
+                        default=""
+                        vals[field]=st.text_input(field, key=f"fair_form_{record['id']}_{i}_{field}", value=default)
+                    if "ID tube analyse" not in vals:
+                        vals["ID tube analyse"]=st.text_input("ID tube analyse", key=f"fair_form_id_{record['id']}_{i}")
+                    if st.button(("Ajouter cet échantillon" if fr else "Add this sample"), key=f"fair_add_{record['id']}_{i}"):
+                        try:
+                            fair_merge_samples(ws,[vals],requester=True)
+                            ws.cell(rows.get("Plant Collection",7),2).value=collection
+                            save_fair_workbook(record,wb); save_metadata(records)
+                            st.success("Échantillon enregistré." if fr else "Sample saved.")
+                        except Exception as exc: st.error(str(exc))
+        elif mode == "Import Excel/CSV":
+            upload=st.file_uploader("Importer Excel ou CSV", type=["xlsx","xlsm","csv","tsv"], key=f"fair_import_{record['id']}")
+            if upload and st.button("Importer les métadonnées" if fr else "Import metadata", key=f"fair_import_btn_{record['id']}"):
+                try:
+                    incoming=parse_sample_upload(upload); count=fair_merge_samples(ws,incoming,requester=True)
+                    ws.cell(rows.get("Plant Collection",7),2).value=collection
+                    save_fair_workbook(record,wb); save_metadata(records)
+                    st.success((f"{count} échantillon(s) importé(s)." if fr else f"{count} sample(s) imported."))
+                except Exception as exc: st.error(str(exc))
+        elif mode in ("Tableau interactif", "Interactive table"):
+            labels=list(rows.keys()); idrow=rows.get("ID tube analyse",11)
+            data=[]
+            for col in range(2,ws.max_column+1):
+                tube=ws.cell(idrow,col).value
+                if tube is not None:
+                    data.append({field:ws.cell(r,col).value for field,r in rows.items() if field not in {"File ID Q-Tof ESI+","File ID Q-Tof ESI-"}})
+            import pandas as pd
+            frame=pd.DataFrame(data, columns=[x for x in labels if x not in {"File ID Q-Tof ESI+","File ID Q-Tof ESI-","Metadata"}])
+            edited=st.data_editor(frame, num_rows="dynamic", use_container_width=True, key=f"fair_editor_{record['id']}")
+            if st.button("Enregistrer le tableau" if fr else "Save table", key=f"fair_editor_save_{record['id']}"):
+                try:
+                    # Rebuild only requester-owned sample fields, retaining admin File IDs by tube ID.
+                    fair_merge_samples(ws,edited.fillna("").to_dict(orient="records"),requester=True)
+                    ws.cell(rows.get("Plant Collection",7),2).value=collection
+                    save_fair_workbook(record,wb); save_metadata(records)
+                    st.success("Métadonnées enregistrées." if fr else "Metadata saved.")
+                except Exception as exc: st.error(str(exc))
+        else:
+            output=BytesIO(); wb.save(output)
+            st.download_button("Télécharger le modèle FAIR" if fr else "Download FAIR template", output.getvalue(), file_name=fair_filename(record), mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        st.divider()
+        if st.button("Enregistrer Plant Collection" if fr else "Save Plant Collection", key=f"fair_collection_{record['id']}"):
+            ws.cell(rows.get("Plant Collection",7),2).value=collection
+            save_fair_workbook(record,wb); save_metadata(records)
+            st.success("Plant Collection enregistrée." if fr else "Plant Collection saved.")
+    except Exception as exc:
+        st.error(("Impossible de charger le fichier FAIR : " if fr else "Could not load FAIR workbook: ") + str(exc))
+
+
 def render_admin():
     st.title(t("admin_title"))
     admin_password = get_secret("ADMIN_PASSWORD", "")
@@ -755,6 +970,51 @@ def render_admin():
                 st.write(f"**{details_label} :** {record.get('analysis_details')}")
             st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
 
+            st.subheader("FAIR – Sample")
+            fair_path = record.get("fair_path") or fair_remote_path(record)
+            st.caption(("Classeur FAIR : " if st.session_state.language == "fr" else "FAIR workbook: ") + fair_path)
+            fair_col1, fair_col2 = st.columns(2)
+            with fair_col1:
+                if st.button("Créer / vérifier le classeur FAIR" if st.session_state.language == "fr" else "Create / check FAIR workbook", key=f"fair_create_{selected_id}"):
+                    try:
+                        fair_wb = load_fair_workbook(record); save_fair_workbook(record, fair_wb); save_metadata(records)
+                        st.success("Classeur FAIR disponible." if st.session_state.language == "fr" else "FAIR workbook is available.")
+                    except Exception as exc: st.error(str(exc))
+            with fair_col2:
+                if st.button("Demander le remplissage FAIR" if st.session_state.language == "fr" else "Request FAIR completion", key=f"fair_request_{selected_id}"):
+                    try:
+                        if not record.get("fair_token"): record["fair_token"] = uuid.uuid4().hex
+                        app_url = str(get_secret("APP_BASE_URL", "")).strip().rstrip("/")
+                        if not app_url:
+                            st.warning("Ajoutez APP_BASE_URL dans les secrets Streamlit pour générer le lien sécurisé." if st.session_state.language == "fr" else "Add APP_BASE_URL to Streamlit secrets to generate the secure link.")
+                        else:
+                            link = f"{app_url}/?fair_token={record['fair_token']}"
+                            subject = "Compléter les métadonnées FAIR – " + record.get("project_name", "")
+                            body = ("Bonjour " if st.session_state.language == "fr" else "Hello ") + record.get("project_manager", "") + ",\n\n" + ("Merci de compléter les métadonnées FAIR des échantillons via ce lien :\n" if st.session_state.language == "fr" else "Please complete the FAIR sample metadata using this link:\n") + link
+                            send_email(record.get("manager_email", ""), subject, body)
+                            record["fair_status"] = "requested"; record["fair_requested_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                            save_metadata(records)
+                            st.success("Demande FAIR envoyée." if st.session_state.language == "fr" else "FAIR completion request sent.")
+                    except Exception as exc: st.error(str(exc))
+            try:
+                fair_wb = load_fair_workbook(record); fair_ws = fair_wb["Sample"]; fair_rows = sample_rows(fair_ws)
+                tube_row = fair_rows.get("ID tube analyse", 11)
+                sample_count = sum(1 for c in range(2, fair_ws.max_column+1) if fair_ws.cell(tube_row,c).value not in (None,""))
+                st.caption((f"{sample_count} échantillon(s) enregistré(s)" if st.session_state.language == "fr" else f"{sample_count} sample(s) recorded"))
+                with st.expander("Importer les File IDs administrateur" if st.session_state.language == "fr" else "Import administrator File IDs"):
+                    admin_upload = st.file_uploader("Excel / CSV", type=["xlsx","xlsm","csv","tsv"], key=f"fair_admin_upload_{selected_id}")
+                    if admin_upload and st.button("Mettre à jour les File IDs" if st.session_state.language == "fr" else "Update File IDs", key=f"fair_admin_save_{selected_id}"):
+                        try:
+                            admin_samples = parse_sample_upload(admin_upload)
+                            existing_ids = {str(fair_ws.cell(tube_row,c).value).strip() for c in range(2,fair_ws.max_column+1) if fair_ws.cell(tube_row,c).value not in (None,"")}
+                            unknown = [str(x.get("ID tube analyse", "")).strip() for x in admin_samples if str(x.get("ID tube analyse", "")).strip() not in existing_ids]
+                            if unknown: raise ValueError("ID tube inconnu(s) : " + ", ".join(unknown))
+                            admin_only_rows = [{k: v for k, v in item.items() if k in {"ID tube analyse", "File ID Q-Tof ESI+", "File ID Q-Tof ESI-"}} for item in admin_samples]
+                            fair_merge_samples(fair_ws, admin_only_rows, requester=False); save_fair_workbook(record, fair_wb); save_metadata(records)
+                            st.success("File IDs mis à jour." if st.session_state.language == "fr" else "File IDs updated.")
+                        except Exception as exc: st.error(str(exc))
+            except Exception as exc: st.warning(str(exc))
+
             # Signed quotation management: the file is stored separately from request documents.
             quote_signed_label = "Devis signé" if st.session_state.language == "fr" else "Quotation signed"
             quote_upload_label = "Importer le devis signé (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload signed quotation (PDF, DOC or DOCX)"
@@ -915,6 +1175,9 @@ def render_admin():
                         delete_response = webdav_request("DELETE", document_path)
                         if delete_response.status_code not in (200, 202, 204, 404):
                             delete_response.raise_for_status()
+                    fair_path = archived_record.get("fair_path") or fair_remote_path(archived_record)
+                    fair_delete = webdav_request("DELETE", fair_path)
+                    if fair_delete.status_code not in (200, 202, 204, 404): fair_delete.raise_for_status()
                     records = [r for r in records if r.get("id") != archived_id]
                     save_metadata(records)
                     st.success("Demande et document supprimés définitivement." if st.session_state.language == "fr" else "Request and document permanently deleted.")
@@ -1149,6 +1412,13 @@ def render_form():
                                 "document_path": remote_file,
                                 "filename": filename,
                             }
+                            fair_bytes = create_fair_workbook(record)
+                            fair_path = fair_remote_path(record)
+                            fair_upload = webdav_request("PUT", fair_path, data=fair_bytes)
+                            fair_upload.raise_for_status()
+                            record["fair_path"] = fair_path
+                            record["fair_status"] = "created"
+                            record["fair_token"] = uuid.uuid4().hex
                             records.append(record)
                             save_metadata(records)
                             st.session_state.last_submission = {
@@ -1219,7 +1489,21 @@ with st.sidebar:
     )
     page = st.radio(t("form"), [t("form"), t("admin")], label_visibility="collapsed")
 
-if page == t("admin"):
+if st.query_params.get("fair_token"):
+    try:
+        fair_records = load_metadata()
+        token = st.query_params.get("fair_token")
+        fair_record = next((r for r in fair_records if r.get("fair_token") == token), None)
+        if not fair_record:
+            st.error("Lien FAIR invalide ou expiré." if st.session_state.language == "fr" else "Invalid or expired FAIR link.")
+        elif fair_record.get("fair_status") not in ("requested", "in_progress", "completed"):
+            st.warning("Le remplissage FAIR n'a pas encore été demandé par l'administrateur." if st.session_state.language == "fr" else "FAIR completion has not yet been requested by the administrator.")
+        else:
+            fair_record["fair_status"] = "in_progress"
+            render_fair_requester(fair_record, fair_records)
+    except Exception as exc:
+        st.error(f"FAIR: {exc}")
+elif page == t("admin"):
     render_admin()
 else:
     render_form()
