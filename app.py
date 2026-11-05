@@ -2505,6 +2505,51 @@ if st.query_params.get("fair_token"):
         st.error(f"FAIR: {exc}")
 elif page == "admin":
     render_admin()
+    # OV-Chimie platform resources are displayed at the bottom of the administrator area.
+    st.divider()
+    _footer_fr = st.session_state.get("language", "fr") == "fr"
+    _footer_col1, _footer_col2 = st.columns([1, 3], vertical_alignment="center")
+    with _footer_col1:
+        _logo_path = os.path.join(os.path.dirname(__file__), "platform_logos", "ov_chimie_logo_user.png")
+        if os.path.exists(_logo_path):
+            st.image(_logo_path, width=180)
+    with _footer_col2:
+        st.markdown("**OV-Chimie, Métabolisme**")
+        st.markdown(
+            "[Site web de la plate-forme](https://green-chemistry-platform.versailles-saclay.hub.inrae.fr/)"
+            if _footer_fr else
+            "[Platform website](https://green-chemistry-platform.versailles-saclay.hub.inrae.fr/)"
+        )
+        _charter_path = os.path.join(os.path.dirname(__file__), "Charte E-GES-00-ver4.pdf")
+        if os.path.exists(_charter_path):
+            with open(_charter_path, "rb") as _charter_file:
+                st.download_button(
+                    label="Télécharger la charte de la plate-forme (PDF)" if _footer_fr else "Download the platform charter (PDF)",
+                    data=_charter_file.read(),
+                    file_name="Charte_E-GES-00_version_4.pdf",
+                    mime="application/pdf",
+                    key="download_platform_charter_admin",
+                )
+    # Institutional and platform logos extracted from template_E-GES-01.docx,
+    # plus the OV-Chimie logo image explicitly supplied by the user.
+    _logo_items = [
+        ("IJPB", "ijpb.png"),
+        ("IBISA", "ibisa.jpeg"),
+        ("Université Paris-Saclay", "universite_paris_saclay.png"),
+        ("INRAE", "inrae.png"),
+        ("AgroParisTech", "agroparistech.png"),
+        ("Observatoire du Végétal", "observatoire_du_vegetal.jpeg"),
+        ("Région Île-de-France", "region_ile_de_france.png"),
+        ("Logo du document Word", "logo_document_word_emf.png"),
+    ]
+    st.caption("Logos institutionnels et partenaires" if _footer_fr else "Institutional and partner logos")
+    _logo_cols = st.columns(4)
+    _logo_dir = os.path.join(os.path.dirname(__file__), "platform_logos")
+    for _idx, (_logo_label, _logo_file) in enumerate(_logo_items):
+        _logo_file_path = os.path.join(_logo_dir, _logo_file)
+        if os.path.exists(_logo_file_path):
+            with _logo_cols[_idx % 4]:
+                st.image(_logo_file_path, caption=_logo_label, use_container_width=True)
 elif page == "fair":
     render_fair_portal()
 else:
