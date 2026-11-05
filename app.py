@@ -4,6 +4,7 @@ import ssl
 import smtplib
 import json
 import uuid
+import unicodedata
 from datetime import date, datetime
 from email.message import EmailMessage
 from io import BytesIO
@@ -499,6 +500,27 @@ def add_to_existing_paragraph(paragraph, value, *, font_size=9, bold=False):
     run.font.size = Pt(font_size)
     run.bold = bold
 
+def filename_part(value, fallback):
+    """Create a readable, filesystem-safe filename component (ASCII, hyphenated)."""
+    value = unicodedata.normalize("NFKD", str(value or ""))
+    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+    value = re.sub(r"[^A-Za-z0-9]+", "-", value).strip("-")
+    return value[:70] or fallback
+
+
+def request_display_label(record, include_date=True):
+    """Consistent requester-project-lab label for administrator request lists."""
+    parts = [
+        filename_part(record.get("project_manager"), "DEMANDEUR"),
+        filename_part(record.get("project_name"), "PROJET"),
+        filename_part(record.get("group"), "LABO"),
+    ]
+    label = " — ".join(parts)
+    if include_date:
+        label += f" — {str(record.get('submitted_at', ''))[:10]}"
+    return label
+
+
 def build_document(form_data):
     doc = Document(TEMPLATE_PATH)
     if len(doc.tables) < 2:
@@ -569,13 +591,11 @@ def build_document(form_data):
     # Filename format includes the unique request ID.
     request_id = form_data.get("request_id", "REQ-SANS-ID")
     timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
-    manager_name = re.sub(
-        r"[^A-Za-z0-9]+", "-", form_data.get("project_manager", "NOM")
-    ).strip("-") or "NOM"
-    lab_name = re.sub(
-        r"[^A-Za-z0-9]+", "-", form_data.get("group", "LABO")
-    ).strip("-") or "LABO"
-    reference = f"E-GES-01-{request_id}-{timestamp}-{manager_name}-{lab_name}"
+    manager_name = filename_part(form_data.get("project_manager"), "DEMANDEUR")
+    project_name = filename_part(form_data.get("project_name"), "PROJET")
+    lab_name = filename_part(form_data.get("group"), "LABO")
+    # Keep the unique request ID and timestamp, and expose requester-project-lab.
+    reference = f"E-GES-01-{request_id}-{timestamp}-{manager_name}-{project_name}-{lab_name}"
     for row in doc.tables[0].rows:
         for cell in row.cells:
             for paragraph in cell.paragraphs:
@@ -1494,7 +1514,7 @@ def render_admin():
             st.info(t("no_requests"))
         else:
             options = {
-                f"{r.get('project_name','(sans nom)')} — {r.get('project_manager','')} — {str(r.get('submitted_at',''))[:10]}": r["id"]
+                f"{request_display_label(r)} — {r.get('id', '')}": r["id"]
                 for r in active_records
             }
             selected_label = st.selectbox(t("select_request"), list(options.keys()), key="active_request_select")
@@ -1692,7 +1712,7 @@ def render_admin():
             st.info("Aucune demande archivée." if st.session_state.language == "fr" else "No archived requests.")
         else:
             archive_options = {
-                f"{r.get('project_name','(sans nom)')} — {r.get('project_manager','')} — {str(r.get('submitted_at',''))[:10]}": r["id"]
+                f"{request_display_label(r)} — {r.get('id', '')}": r["id"]
                 for r in archived_records
             }
             archive_label = st.selectbox(
