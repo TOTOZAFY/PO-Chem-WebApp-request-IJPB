@@ -2526,11 +2526,14 @@ _logo_items = [
     ("Image 7 du document Word", "image7_emf.png"),
     ("Image 8 du document Word", "image8.png"),
 ]
-with st.sidebar.expander("Logos institutionnels et partenaires" if _footer_fr else "Institutional and partner logos", expanded=True):
-    for _logo_label, _logo_file in _logo_items:
-        _logo_file_path = os.path.join(_logo_dir, _logo_file)
-        if os.path.exists(_logo_file_path):
-            st.image(_logo_file_path, caption=_logo_label, use_container_width=True)
+# Render each logo explicitly in the sidebar. Calling st.image() here can
+# route the image to the main page rather than the sidebar in some Streamlit
+# versions, leaving the sidebar expander empty. Use the sidebar image API.
+st.sidebar.markdown("**" + ("Logos institutionnels et partenaires" if _footer_fr else "Institutional and partner logos") + "**")
+for _logo_label, _logo_file in _logo_items:
+    _logo_file_path = os.path.join(_logo_dir, _logo_file)
+    if os.path.isfile(_logo_file_path):
+        st.sidebar.image(_logo_file_path, caption=_logo_label, use_container_width=True)
 
 if st.query_params.get("fair_token"):
     try:
