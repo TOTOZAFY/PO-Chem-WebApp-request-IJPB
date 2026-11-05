@@ -766,7 +766,7 @@ def render_fair_requester(record, records):
         current_collection = ws.cell(rows.get("Plant Collection", 7), 2).value or ""
         collection = st.text_area("Plant Collection", value=str(current_collection), height=130)
         st.subheader("2. " + ("Métadonnées des échantillons" if fr else "Sample metadata"))
-        warning = ("Le modèle de métadonnées est fourni à titre d'exemple. Veuillez adapter les champs à votre expérience. Vous pouvez ajouter des lignes pour toute information expérimentale supplémentaire et laisser vides les rubriques non applicables. Conservez les intitulés standards utilisés pour la correspondance automatique; ne remplissez pas les lignes File ID Q-Tof ESI+ et File ID Q-Tof ESI-." if fr else "The provided metadata template is an example. Please adapt the metadata fields to your own experiment: keep the fields that are relevant, add rows for any additional experimental information, and leave non-applicable fields blank. Do not change the standard field names where they are used for automatic matching; let the rows File ID Q-Tof ESI+ and File ID Q-Tof ESI- empty.")
+        warning = ("Le modèle de métadonnées est fourni à titre d'exemple. Veuillez adapter les champs à votre expérience. Vous pouvez ajouter des lignes pour toute information expérimentale supplémentaire et laisser vides les rubriques non applicables. Conservez les intitulés standards utilisés pour la correspondance automatique ; ne remplissez pas les lignes File ID Q-Tof ESI+ et File ID Q-Tof ESI-." if fr else "The provided metadata template is an example. Please adapt the metadata fields to your own experiment: keep the fields that are relevant, add rows for any additional experimental information, and leave non-applicable fields blank. Do not change the standard field names where they are used for automatic matching ; let the rows File ID Q-Tof ESI+ and File ID Q-Tof ESI- empty.")
         st.info(warning)
         mode = st.radio("Mode de saisie" if fr else "Entry method", [
             "Formulaire web" if fr else "Web form",
@@ -2376,7 +2376,7 @@ def render_fair_profile_manager(sheet):
                     profile_payload["profiles"].pop(clean_name, None)
                     st.error(("Impossible de créer le profil : " if fr else "Could not create profile: ") + str(exc))
 
-    with st.expander("Ajouter un utilisateur" if fr else "Add a profil"):
+    with st.expander("Ajouter un profil" if fr else "Add a profil"):
         st.caption(
             "Le nouvel utilisateur reprend les préférences du dernier profil actif pour Analysis, Data Treatment et Pipeline Step by Step. Chaque utilisateur pourra ensuite modifier ses propres préférences."
             if fr else
