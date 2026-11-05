@@ -1988,7 +1988,16 @@ def render_form():
     st.markdown(
         """
         <style>
-        .block-container {max-width: 1050px; padding-top: 2rem; padding-bottom: 3rem;}
+        .block-container {
+            max-width: none !important;
+            width: 100% !important;
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            padding-left: 1.25rem !important;
+            padding-right: 1.25rem !important;
+            padding-top: 1.25rem;
+            padding-bottom: 2rem;
+        }
         .hero {padding: 1.3rem 1.5rem; border-radius: 14px;
                background: linear-gradient(120deg,#edf5fb,#f4f7f2); margin-bottom: 1rem;}
         .hero h1 {margin: 0; color: #183b56; font-size: 1.8rem;}
