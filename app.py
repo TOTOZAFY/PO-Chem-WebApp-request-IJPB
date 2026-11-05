@@ -2211,6 +2211,46 @@ def render_fair_profile_manager(sheet):
                     profile_payload["profiles"].pop(clean_name, None)
                     st.error(("Impossible de créer le profil : " if fr else "Could not create profile: ") + str(exc))
 
+    with st.expander("Ajouter un utilisateur" if fr else "Add a user"):
+        st.caption(
+            "Le nouvel utilisateur reprend les préférences du dernier profil actif pour Analysis, Data Treatment et Pipeline Step by Step. Chaque utilisateur pourra ensuite modifier ses propres préférences."
+            if fr else
+            "The new user inherits the preferences of the last active profile for Analysis, Data Treatment and Pipeline Step by Step. Each user can then customize their own preferences."
+        )
+        with st.form(f"add_user_profile_form_{sheet.lower().replace(' ', '_')}", clear_on_submit=True):
+            added_user_name = st.text_input(
+                "Nom du nouvel utilisateur" if fr else "New user name",
+                placeholder="Ex. Marie, Jean…" if fr else "e.g. Marie, Jean…",
+            )
+            add_user_submitted = st.form_submit_button(
+                "Ajouter l'utilisateur" if fr else "Add user", use_container_width=True
+            )
+        if add_user_submitted:
+            clean_user_name = added_user_name.strip()
+            if not clean_user_name:
+                st.warning("Saisis un nom d'utilisateur." if fr else "Enter a user name.")
+            elif any(existing.casefold() == clean_user_name.casefold() for existing in profile_names):
+                st.warning("Cet utilisateur existe déjà." if fr else "This user already exists.")
+            elif not profile_storage_ok:
+                st.error("Le stockage Nextcloud des profils n'est pas disponible." if fr else "Nextcloud profile storage is unavailable.")
+            else:
+                import copy
+                # Snapshot all preferences from the currently active (last active) user.
+                source_data = profile_payload["profiles"].get(st.session_state.active_user_profile, {})
+                inherited = copy.deepcopy(source_data.get("preferences_by_sheet", {}))
+                if "preferences" in source_data and "Analysis" not in inherited:
+                    inherited["Analysis"] = copy.deepcopy(source_data["preferences"])
+                inherited[sheet] = get_profile_preferences(sheet)
+                profile_payload["profiles"][clean_user_name] = {"preferences_by_sheet": inherited}
+                try:
+                    save_user_profiles(profile_payload)
+                    st.session_state.active_user_profile = clean_user_name
+                    st.session_state.pop(loaded_marker, None)
+                    st.rerun()
+                except Exception as exc:
+                    profile_payload["profiles"].pop(clean_user_name, None)
+                    st.error(("Impossible d'ajouter l'utilisateur : " if fr else "Could not add user: ") + str(exc))
+
     with st.expander("Renommer le profil actif" if fr else "Rename active profile"):
         with st.form(f"rename_user_profile_form_{sheet.lower().replace(' ', '_')}"):
             renamed_profile = st.text_input(
