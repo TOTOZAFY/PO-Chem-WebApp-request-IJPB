@@ -18,3 +18,6 @@ Replace the files in the GitHub repository with the contents of this ZIP and all
 - Data Treatment now offers two mutually exclusive workflows: MZmine (existing guided form and POS/NEG table) or Custom (free-text description).
 - The custom description and selected method are saved in the existing FAIR `Data treatment` worksheet (dedicated rows 82–83).
 - Switching between methods preserves the values previously entered for the other method.
+
+### FAIR – Pipeline Step by Step
+The Pipeline Step by Step sheet now offers two mutually exclusive modes: an editable interactive table based on the predefined workflow, or `None` to clear the worksheet completely. The interactive table allows users to record completion status and comments for each POS/NEG step. Switching back from `None` restores the predefined steps from the original FAIR template.

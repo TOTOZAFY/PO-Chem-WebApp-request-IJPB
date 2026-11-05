@@ -1123,6 +1123,130 @@ def render_fair_data_treatment(record, records):
         st.error(("Impossible de charger ou d'enregistrer Data treatment : " if fr else "Could not load or save Data treatment: ") + str(exc))
 
 
+def render_fair_pipeline_step(record, records):
+    """Choose an interactive pipeline table or explicitly leave the FAIR sheet empty."""
+    import pandas as pd
+    fr = st.session_state.get("language", "fr") == "fr"
+    st.title("FAIR – Pipeline Step by Step")
+    st.caption(("Demande : " if fr else "Request: ") + str(record.get("id", "")))
+    try:
+        wb = load_fair_workbook(record)
+        if "Pipeline Step by Step" not in wb.sheetnames:
+            st.error("La feuille Pipeline Step by Step est absente du classeur FAIR." if fr else "Pipeline Step by Step sheet is missing from the FAIR workbook.")
+            return
+        ws = wb["Pipeline Step by Step"]
+        mode_cell, mode_value_cell = "D1", "E1"
+        saved_mode = str(ws[mode_value_cell].value or "Tableau interactif")
+        options = ["Tableau interactif", "Aucun (laisser la feuille vide)"] if fr else ["Interactive table", "None (leave the sheet empty)"]
+        default = options[1] if saved_mode.casefold() in ("none", "aucun", options[1].casefold()) else options[0]
+        selected = st.radio("Mode de renseignement" if fr else "Entry mode", options, index=options.index(default), key=f"fair_pipeline_step_pref_mode_{record.get('id')}")
+        if selected == options[1]:
+            st.info("La feuille Pipeline Step by Step sera entièrement vidée lors de l'enregistrement." if fr else "The Pipeline Step by Step worksheet will be completely cleared when saved.")
+            if st.button("Enregistrer : feuille vide" if fr else "Save: empty sheet", type="primary", key=f"pipeline_none_save_{record.get('id')}"):
+                for row in ws.iter_rows():
+                    for cell in row:
+                        if cell.__class__.__name__ != "MergedCell":
+                            cell.value = None
+                ws[mode_cell] = "Mode"
+                ws[mode_value_cell] = "None"
+                save_fair_workbook(record, wb)
+                save_metadata(records)
+                st.success("La feuille Pipeline Step by Step est maintenant vide." if fr else "Pipeline Step by Step sheet is now empty.")
+            return
+
+        # If the user previously selected None, restore the original step labels
+        # from the pristine template when switching back to the interactive table.
+        if not any(ws.cell(r, 1).value is not None or ws.cell(r, 2).value is not None for r in range(1, ws.max_row + 1)):
+            template_wb = load_workbook(FAIR_TEMPLATE_PATH)
+            template_ws = template_wb["Pipeline Step by Step"]
+            for r in range(1, template_ws.max_row + 1):
+                for c in (1, 2):
+                    ws.cell(r, c).value = template_ws.cell(r, c).value
+        # Read the predefined workflow from the original FAIR template (steps in A, polarity in B).
+        rows = []
+        for r in range(1, ws.max_row + 1):
+            step = ws.cell(r, 1).value
+            polarity = ws.cell(r, 2).value
+            if step is None and polarity is None:
+                continue
+            if r == 1 and str(step or "").strip().casefold() in ("step", "étape"):
+                continue
+            rows.append({
+                "Ligne Excel": r,
+                "Étape": str(step or ""),
+                "Mode": str(polarity or ""),
+                "Réalisé": str(ws.cell(r, 3).value or ""),
+                "Détails / commentaires": str(ws.cell(r, 4).value or ""),
+            })
+        st.caption("Modifiez le statut et ajoutez des précisions pour chaque étape. Les étapes et modes POS/NEG du modèle sont conservés." if fr else "Edit the status and add details for each step. The template steps and POS/NEG modes are retained.")
+        df = pd.DataFrame(rows)
+        edited = st.data_editor(
+            df, use_container_width=True, hide_index=True, num_rows="fixed",
+            disabled=["Ligne Excel", "Étape", "Mode"],
+            column_config={
+                "Ligne Excel": st.column_config.NumberColumn("Ligne", width="small"),
+                "Étape": st.column_config.TextColumn("Étape" if fr else "Step", width="large"),
+                "Mode": st.column_config.TextColumn("Mode", width="small"),
+                "Réalisé": st.column_config.SelectboxColumn("État" if fr else "Status", options=["", "Oui", "Non", "Partiel", "N/A"] if fr else ["", "Yes", "No", "Partial", "N/A"], width="medium"),
+                "Détails / commentaires": st.column_config.TextColumn("Détails / commentaires" if fr else "Details / comments", width="large"),
+            }, key=f"fair_pipeline_step_pref_editor_{record.get('id')}"
+        )
+        if st.button("Enregistrer le tableau Pipeline Step by Step" if fr else "Save Pipeline Step by Step table", type="primary", key=f"pipeline_table_save_{record.get('id')}"):
+            # Preserve original A/B template labels, update only editable columns and mode marker.
+            for _, line in edited.iterrows():
+                r = int(line["Ligne Excel"])
+                ws.cell(r, 3).value = "" if pd.isna(line["Réalisé"]) else str(line["Réalisé"])
+                ws.cell(r, 4).value = "" if pd.isna(line["Détails / commentaires"]) else str(line["Détails / commentaires"])
+            ws[mode_cell] = "Mode"
+            ws[mode_value_cell] = "Interactive table"
+            save_fair_workbook(record, wb)
+            save_metadata(records)
+            st.success("Pipeline Step by Step enregistré dans le classeur FAIR." if fr else "Pipeline Step by Step saved to the FAIR workbook.")
+    except Exception as exc:
+        st.error(("Impossible de charger ou d'enregistrer Pipeline Step by Step : " if fr else "Could not load or save Pipeline Step by Step: ") + str(exc))
+
+
+def render_fair_pipeline_access():
+    fr = st.session_state.get("language", "fr") == "fr"
+    records = load_metadata()
+    active_records = [r for r in records if not r.get("deleted", False)]
+    role = st.selectbox("Qui souhaite compléter Pipeline Step by Step ?" if fr else "Who is completing Pipeline Step by Step?", ["Demandeur", "Administrateur"] if fr else ["Requester", "Administrator"], key="fair_pipeline_role")
+    if role in (["Demandeur"] if fr else ["Requester"]):
+        with st.form("fair_pipeline_requester_access_form"):
+            reference = st.text_input("Référence de la demande" if fr else "Request reference")
+            email = st.text_input("Adresse e-mail du demandeur" if fr else "Requester email address")
+            submitted = st.form_submit_button("Accéder à Pipeline Step by Step" if fr else "Open Pipeline Step by Step")
+        if submitted:
+            record = next((r for r in active_records if str(r.get("id", "")).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
+            if not record:
+                st.error("Référence ou adresse e-mail incorrecte." if fr else "Reference or email address is incorrect.")
+                return
+            st.session_state["fair_pipeline_requester_id"] = record.get("id")
+            st.rerun()
+        saved_id = st.session_state.get("fair_pipeline_requester_id")
+        record = next((r for r in active_records if str(r.get("id")) == str(saved_id)), None) if saved_id else None
+        if record:
+            render_fair_pipeline_step(record, records)
+        return
+    password_expected = get_secret("ADMIN_PASSWORD", "")
+    if not st.session_state.get("fair_pipeline_admin_authenticated", False):
+        with st.form("fair_pipeline_admin_login_form"):
+            password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
+            login = st.form_submit_button("Se connecter" if fr else "Log in")
+        if login and password == password_expected:
+            st.session_state["fair_pipeline_admin_authenticated"] = True
+            st.rerun()
+        elif login:
+            st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+        return
+    if active_records:
+        choices = {f"{r.get('id')} – {r.get('project_name', '')}": r for r in active_records}
+        selected = st.selectbox("Sélectionner une demande" if fr else "Select a request", list(choices), key="fair_pipeline_admin_request")
+        render_fair_pipeline_step(choices[selected], records)
+    else:
+        st.info("Aucune demande disponible." if fr else "No requests available.")
+
+
 def render_fair_data_treatment_access():
     """Reuse the FAIR requester/admin access pattern for Data treatment."""
     fr = st.session_state.get("language", "fr") == "fr"
@@ -1248,12 +1372,7 @@ def render_fair_portal():
         st.divider()
         render_fair_profile_manager(selected_sheet)
         st.divider()
-        st.subheader(selected_sheet)
-        st.info(
-            "Cette feuille sera développée dans une prochaine étape. Les préférences propres à cette feuille sont déjà mémorisées dans le profil actif."
-            if fr else
-            "This sheet will be implemented in a later phase. Sheet-specific preferences are already stored in the active profile."
-        )
+        render_fair_pipeline_access()
         return
 
     st.divider()
@@ -2211,7 +2330,7 @@ def render_fair_profile_manager(sheet):
                     profile_payload["profiles"].pop(clean_name, None)
                     st.error(("Impossible de créer le profil : " if fr else "Could not create profile: ") + str(exc))
 
-    with st.expander("Ajouter un utilisateur" if fr else "Add a profil"):
+    with st.expander("Ajouter un utilisateur" if fr else "Add a user"):
         st.caption(
             "Le nouvel utilisateur reprend les préférences du dernier profil actif pour Analysis, Data Treatment et Pipeline Step by Step. Chaque utilisateur pourra ensuite modifier ses propres préférences."
             if fr else
