@@ -787,6 +787,71 @@ def render_fair_administrator(record, records):
         st.error(("Impossible de charger le fichier FAIR : " if fr else "Could not load FAIR workbook: ") + str(exc))
 
 
+
+# FAIR Analysis protocol presets. Texts are kept editable and saved in the original Analysis sheet.
+FAIR_EXTRACTION_PROTOCOLS = {
+    "Protocole de base – Routaboul et al. (2006)": "The metabolite extraction protocol was adapted from Routaboul et al. (2006). Briefly, 1.8 mL of extraction solution (methanol/water/acetone/formic acid, proportion: 30/28/42/0.8 % v/v) and 500 ng of Apigenin (used as internal standard) were added to X mg lyophilized powder. Each sample was homogenized using a FastPrep instrument (2 × 30 sec, 14,000 rpm). The samples were placed in an ultrasonic bath (Advantage-Lab, AL04-04-230) for 1 min at 25 kHz, shaken for 30 min at 4°C using a ThermoMixer C (Eppendorf), and centrifuged for 10 min at maximum speed to remove debris. The supernatants were transferred to new tubes and the pellets were extracted again with 1.8 mL of extraction solution, ultra-sonicated, shaken and centrifuged as in the first step. The second supernatant was pooled with the first one in a glass tube, and dried in a SpeedVac rotary evaporator and freeze dryer. The dry pellet was resuspended in 200 µL of ULC/MS grade water (Biosolve) with 10% acetonitrile ULC/MS grade (Biosolve) and filtered through Whatman glass filter (grade GF/D, 2.7 µm pore size).",
+    "Proto Massi modifié": "Extraction: Metabolites were extracted from X mg of camelina dry mature seeds. Briefly, 1 mL of MeOH: Methyl-tert-butyl: H2O (1:3:1), conserved at 4°C, and 200 ng of Apigenin (used as internal standard) were added to each sample, which were then homogenized in 2 mL tubes using a FastPrep instrument (1 min, 14,000 rpm). The mixtures were then shaken for 30 min at 4°C using a ThermoMixer C (Eppendorf), placed in an ice-cooled ultrasonication bath for 15 min and centrifuged for 1 min at maximum speed to remove debris. The extracted samples were then transferred to new tubes containing 650 mL of MeOH:water (1:3), previously placed at -20°C. The mixtures were centrifuged for 1 min at 14,000 rpm. The addition of MeOH:water (1:3) and centrifugation led to phase separation, providing the upper organic phase containing lipids, a lower aqueous phase containing polar and semi-polar metabolites, and a pellet of starch and proteins. The phase containing polar and semi-polar metabolites was dried down in a SpeedVac vacuum concentrator (overnight) and resuspended in X µL of ULC/MS grade water (Biosolve) with 10% ACN ULC/MS grade (Biosolve), then filtered through a Whatman filter.",
+    "Proto Jean Marc modifié": "The metabolite extraction protocol was adapted from Routaboul et al. (2006). Briefly, 1.8 mL of extraction solution (methanol/water/acetone/formic acid, proportion: 30/28/42/0.8 % v/v) and 500 ng of Apigenin (used as internal standard) were added to X mg lyophilized powder. Each sample was homogenized using a FastPrep instrument (2 × 30 sec, 14,000 rpm). The samples were placed in an ultrasonic bath (Advantage-Lab, AL04-04-230) for 1 min at 25 kHz, shaken for 30 min at 4°C using a ThermoMixer C (Eppendorf), and centrifuged for 10 min at maximum speed to remove debris. The supernatants were transferred to new tubes and the pellets were extracted again with 1.8 mL of extraction solution, ultra-sonicated, shaken and centrifuged as in the first step. The second supernatant was pooled with the first one in a glass tube, and dried in a SpeedVac rotary evaporator and freeze dryer. The dry pellet was resuspended in 200 µL of ULC/MS grade water (Biosolve) with 10% acetonitrile ULC/MS grade (Biosolve) and filtered through Whatman glass filter (grade GF/D, 2.7 µm pore size).",
+    "Proto Gilles": "All steps were performed in 2 mL Safelock Eppendorf tubes. The ground frozen samples (50 mg) were resuspended in 1 mL of frozen (-20°C) Water:Acetonitrile:Isopropanol (2:3:3) containing 200 ng apigenin (used as internal standard) and extracted for 10 min at 4°C with shaking at 1400 rpm in an Eppendorf Thermomixer. Insoluble material was removed by centrifugation at 20000g for 5 min. The supernatant was collected and dried in a Speed-Vac.",
+}
+
+def render_fair_analysis(record, records):
+    fr = st.session_state.get("language", "fr") == "fr"
+    st.title("FAIR – Analysis")
+    st.caption(("Demande : " if fr else "Request: ") + str(record.get("id", "")))
+    st.info("Chaque champ doit être vérifié et renseigné selon la manipulation réellement effectuée. Les textes proposés sont des exemples modifiables : adaptez-les, supprimez les éléments non applicables et précisez toute information manquante." if fr else "Check and complete every field according to the experiment actually performed. Suggested texts are editable examples: adapt them, remove non-applicable information and specify any missing details.")
+    try:
+        wb = load_fair_workbook(record)
+        ws = wb["Analysis"]
+        # The FAIR template stores field names in column A and values in column B.
+        labels = {str(ws.cell(r, 1).value).strip(): r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value is not None and str(ws.cell(r, 1).value).strip()}
+        protocol_label = "Extraction protocol"
+        if protocol_label not in labels:
+            st.error("Le champ Extraction protocol est introuvable dans la feuille Analysis." if fr else "Extraction protocol field is missing from the Analysis sheet.")
+            return
+        protocol_row = labels[protocol_label]
+        saved_text = str(ws.cell(protocol_row, 2).value or "")
+        preset_names = list(FAIR_EXTRACTION_PROTOCOLS.keys()) + (["Autre / Personnaliser"] if fr else ["Other / Customize"])
+        # Try to identify the current preset from the saved content.
+        selected_default = "Autre / Personnaliser" if fr else "Other / Customize"
+        for name, body in FAIR_EXTRACTION_PROTOCOLS.items():
+            if saved_text.strip() == body.strip():
+                selected_default = name
+                break
+        st.subheader("1. " + ("Protocole d'extraction" if fr else "Extraction protocol"))
+        selected_protocol = st.selectbox("Choisir un protocole" if fr else "Select a protocol", preset_names, index=preset_names.index(selected_default), key=f"analysis_protocol_{record.get('id')}")
+        if selected_protocol in FAIR_EXTRACTION_PROTOCOLS:
+            proposed = FAIR_EXTRACTION_PROTOCOLS[selected_protocol]
+        else:
+            proposed = saved_text
+        protocol_text = st.text_area("Description complète du protocole – modifiable" if fr else "Full protocol description – editable", value=proposed, height=300, key=f"analysis_protocol_text_{record.get('id')}_{selected_protocol}")
+        if selected_protocol == ("Autre / Personnaliser" if fr else "Other / Customize") and not protocol_text.strip():
+            st.caption("Veuillez décrire le protocole réellement utilisé." if fr else "Please describe the protocol actually used.")
+        st.divider()
+        st.subheader("2. " + ("Autres informations Analysis" if fr else "Other Analysis information"))
+        # Existing FAIR labels and example values are retained; every field is editable by either profile.
+        excluded = {protocol_label}
+        field_values = {}
+        for field, row in labels.items():
+            if field in excluded or field == "Acquisition":
+                continue
+            current = ws.cell(row, 2).value
+            if current is None:
+                current = ""
+            field_values[field] = st.text_area(field, value=str(current), height=100 if len(str(current)) > 120 else 68, key=f"analysis_field_{record.get('id')}_{row}")
+        if st.button("Soumettre et enregistrer Analysis" if fr else "Submit and save Analysis", type="primary", key=f"analysis_save_{record.get('id')}"):
+            ws.cell(protocol_row, 2).value = protocol_text.strip()
+            # Save selected preset name in adjacent cell as traceable metadata without changing labels.
+            ws.cell(protocol_row, 3).value = selected_protocol
+            for field, value in field_values.items():
+                ws.cell(labels[field], 2).value = value.strip()
+            save_fair_workbook(record, wb)
+            save_metadata(records)
+            st.success("Les informations de la feuille Analysis ont été enregistrées dans le classeur FAIR." if fr else "Analysis information has been saved to the FAIR workbook.")
+    except Exception as exc:
+        st.error(("Impossible de charger ou d'enregistrer la feuille Analysis : " if fr else "Could not load or save the Analysis sheet: ") + str(exc))
+
 def render_fair_portal():
     """FAIR navigation: choose a sheet first, then a role within that sheet."""
     fr = st.session_state.get("language", "fr") == "fr"
@@ -800,12 +865,62 @@ def render_fair_portal():
         key="fair_selected_sheet",
     )
 
+    if selected_sheet == "Analysis":
+        st.divider()
+        st.subheader("Analysis")
+        role = st.selectbox(
+            "Qui souhaite compléter la feuille Analysis ?" if fr else "Who is completing the Analysis sheet?",
+            options=["Demandeur", "Administrateur"] if fr else ["Requester", "Administrator"],
+            key="fair_analysis_role",
+        )
+        records = load_metadata()
+        active_records = [r for r in records if not r.get("deleted", False)]
+        requester_role = "Demandeur" if fr else "Requester"
+        if role == requester_role:
+            with st.form("fair_analysis_requester_access_form"):
+                reference = st.text_input("Référence de la demande" if fr else "Request reference")
+                email = st.text_input("Adresse e-mail du demandeur" if fr else "Requester email address")
+                submitted = st.form_submit_button("Accéder à Analysis" if fr else "Open Analysis")
+            if submitted:
+                record = next((r for r in active_records if str(r.get("id", "")).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
+                if not record:
+                    st.error("Référence ou adresse e-mail incorrecte." if fr else "Request reference or email address is incorrect.")
+                    return
+                st.session_state["fair_analysis_requester_id"] = record.get("id")
+                st.rerun()
+            saved_id = st.session_state.get("fair_analysis_requester_id")
+            record = next((r for r in active_records if str(r.get("id")) == str(saved_id)), None) if saved_id else None
+            if record:
+                render_fair_analysis(record, records)
+            return
+        admin_password = get_secret("ADMIN_PASSWORD", "")
+        if not admin_password:
+            st.error("Le secret ADMIN_PASSWORD n'est pas configuré." if fr else "ADMIN_PASSWORD secret is not configured.")
+            return
+        if not st.session_state.get("fair_analysis_admin_authenticated", False):
+            with st.form("fair_analysis_admin_login_form"):
+                password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
+                login = st.form_submit_button("Se connecter" if fr else "Log in")
+            if login and password == admin_password:
+                st.session_state["fair_analysis_admin_authenticated"] = True
+                st.rerun()
+            elif login:
+                st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+            return
+        if active_records:
+            choices = {f"{r.get('id')} – {r.get('project_name', '')}": r for r in active_records}
+            selected = st.selectbox("Sélectionner une demande" if fr else "Select a request", list(choices), key="fair_analysis_admin_request")
+            render_fair_analysis(choices[selected], records)
+        else:
+            st.info("Aucune demande disponible." if fr else "No requests available.")
+        return
+
     if selected_sheet != "Sample":
         st.subheader(selected_sheet)
         st.info(
-            "Cette feuille sera développée dans une prochaine étape. Pour le moment, seule la feuille Sample est opérationnelle."
+            "Cette feuille sera développée dans une prochaine étape. Pour le moment, seule la feuille Sample et la feuille Analysis sont opérationnelles."
             if fr else
-            "This sheet will be implemented in a later phase. For now, only the Sample sheet is operational."
+            "This sheet will be implemented in a later phase. For now, only Sample and Analysis are operational."
         )
         return
 
