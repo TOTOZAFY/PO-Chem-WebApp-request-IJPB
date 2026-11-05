@@ -2533,14 +2533,14 @@ elif page == "admin":
     # Institutional and platform logos extracted from template_E-GES-01.docx,
     # plus the OV-Chimie logo image explicitly supplied by the user.
     _logo_items = [
-        ("IJPB", "ijpb.png"),
-        ("IBISA", "ibisa.jpeg"),
-        ("Université Paris-Saclay", "universite_paris_saclay.png"),
-        ("INRAE", "inrae.png"),
-        ("AgroParisTech", "agroparistech.png"),
-        ("Observatoire du Végétal", "observatoire_du_vegetal.jpeg"),
-        ("Région Île-de-France", "region_ile_de_france.png"),
-        ("Logo du document Word", "logo_document_word_emf.png"),
+         ("Image 1 du document Word", "image1.png"),
+        ("Image 2 du document Word", "image2.png"),
+        ("Image 3 du document Word", "image3.png"),
+        ("Image 4 du document Word", "image4.png"),
+        ("Image 5 du document Word", "image5.jpeg"),
+        ("Image 6 du document Word", "image6.jpeg"),
+        ("Image 7 du document Word", "image7_emf.png"),
+        ("Image 8 du document Word", "image8.png"),
     ]
     st.caption("Logos institutionnels et partenaires" if _footer_fr else "Institutional and partner logos")
     _logo_cols = st.columns(4)
