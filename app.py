@@ -1847,8 +1847,21 @@ def render_form():
 if "language" not in st.session_state:
     st.session_state.language = "fr"
 
-if "language" not in st.session_state:
-    st.session_state.language = "fr"
+# Global language selector: available throughout the application and
+# deliberately independent from the FAIR user-profile preferences.
+if "language_selector" not in st.session_state:
+    st.session_state.language_selector = (
+        "Français" if st.session_state.language == "fr" else "English"
+    )
+_selected_language_label = st.sidebar.selectbox(
+    "Langue / Language",
+    options=["Français", "English"],
+    key="language_selector",
+)
+_selected_language_code = "fr" if _selected_language_label == "Français" else "en"
+if st.session_state.language != _selected_language_code:
+    st.session_state.language = _selected_language_code
+    st.rerun()
 
 # Profiles are loaded and displayed only inside FAIR > Analysis.
 profile_payload = {"profiles": {}}
