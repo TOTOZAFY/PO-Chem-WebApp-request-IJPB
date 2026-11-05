@@ -30,6 +30,7 @@ FAIR_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "FAIR_template.xlsx
 CLOUD_FOLDER = "MyDrive/Demandes_Analyses"
 METADATA_PATH = "MyDrive/demandes_metadata.json"
 NOTIFICATION_SETTINGS_PATH = "MyDrive/notification_settings.json"
+USER_PROFILES_PATH = "MyDrive/user_profiles.json"
 FAIR_FOLDER = CLOUD_FOLDER
 DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
 ANALYSIS_TYPES = [
@@ -386,6 +387,58 @@ def save_notification_settings(settings):
         timeout=30,
     )
     response.raise_for_status()
+
+
+# Persistent interface profiles. Only interface preferences are stored here;
+# request contents, FAIR values, credentials and form text are deliberately excluded.
+PROFILE_FIXED_PREFERENCES = {
+    "language", "navigation_page", "fair_selected_sheet",
+    "fair_analysis_role", "fair_sample_role", "analysis_type_select",
+}
+
+
+def load_user_profiles():
+    response = webdav_request("GET", USER_PROFILES_PATH)
+    if response.status_code == 404:
+        return {"profiles": {}}
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict) or not isinstance(payload.get("profiles", {}), dict):
+        raise RuntimeError("Le fichier des profils utilisateur dans Nextcloud est invalide.")
+    return payload
+
+
+def save_user_profiles(payload):
+    response = webdav_request(
+        "PUT", USER_PROFILES_PATH,
+        data=json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8"),
+        timeout=30,
+    )
+    response.raise_for_status()
+
+
+def get_profile_preferences():
+    preferences = {}
+    for key in PROFILE_FIXED_PREFERENCES:
+        if key in st.session_state:
+            value = st.session_state[key]
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                preferences[key] = value
+    # Keep protocol preset selections, but never protocol descriptions or FAIR field values.
+    for key, value in st.session_state.items():
+        if key.startswith("analysis_protocol_") and not key.startswith("analysis_protocol_text_"):
+            if isinstance(value, str):
+                preferences[key] = value
+    return preferences
+
+
+def apply_profile_preferences(preferences):
+    for key in list(st.session_state.keys()):
+        if key in PROFILE_FIXED_PREFERENCES or (key.startswith("analysis_protocol_") and not key.startswith("analysis_protocol_text_")):
+            st.session_state.pop(key, None)
+    for key, value in preferences.items():
+        if key in PROFILE_FIXED_PREFERENCES or (key.startswith("analysis_protocol_") and not key.startswith("analysis_protocol_text_")):
+            st.session_state[key] = value
 
 
 def join_email_recipients(*addresses):
@@ -842,8 +895,11 @@ def render_fair_analysis(record, records):
             field_values[field] = st.text_area(field, value=str(current), height=100 if len(str(current)) > 120 else 68, key=f"analysis_field_{record.get('id')}_{row}")
         if st.button("Soumettre et enregistrer Analysis" if fr else "Submit and save Analysis", type="primary", key=f"analysis_save_{record.get('id')}"):
             ws.cell(protocol_row, 2).value = protocol_text.strip()
-            # Save selected preset name in adjacent cell as traceable metadata without changing labels.
-            ws.cell(protocol_row, 3).value = selected_protocol
+            # The selected protocol is stored only in the FAIR "Extraction protocol" field (column B).
+            # Do not duplicate preset names or protocol texts in auxiliary columns.
+            ws.cell(protocol_row, 3).value = None
+            for obsolete_cell in ("D2", "E2", "D10", "E10", "D11", "E11"):
+                ws[obsolete_cell].value = None
             for field, value in field_values.items():
                 ws.cell(labels[field], 2).value = value.strip()
             save_fair_workbook(record, wb)
@@ -1771,7 +1827,78 @@ def render_form():
 
 if "language" not in st.session_state:
     st.session_state.language = "fr"
+
+# Load the persistent profile list from Nextcloud before creating the page widgets.
+profile_payload = {"profiles": {}}
+profile_storage_ok = False
+try:
+    profile_payload = load_user_profiles()
+    profile_storage_ok = True
+    if not profile_payload["profiles"]:
+        profile_payload["profiles"]["Chriso"] = {"preferences": {"language": "fr"}}
+        save_user_profiles(profile_payload)
+except Exception as profile_exc:
+    st.sidebar.warning("Profils indisponibles : " + str(profile_exc))
+
+profile_names = sorted(profile_payload.get("profiles", {}).keys(), key=str.casefold)
+if not profile_names:
+    profile_names = ["Session temporaire"]
+if "active_user_profile" not in st.session_state or st.session_state.active_user_profile not in profile_names:
+    st.session_state.active_user_profile = "Chriso" if "Chriso" in profile_names else profile_names[0]
+
+# Restore preferences only when the selected profile changes.
+if st.session_state.get("_loaded_user_profile") != st.session_state.active_user_profile:
+    selected_profile_data = profile_payload.get("profiles", {}).get(st.session_state.active_user_profile, {})
+    apply_profile_preferences(selected_profile_data.get("preferences", {}))
+    st.session_state["_loaded_user_profile"] = st.session_state.active_user_profile
+
 with st.sidebar:
+    st.subheader("Profil utilisateur" if st.session_state.language == "fr" else "User profile")
+    chosen_profile = st.selectbox(
+        "Profil" if st.session_state.language == "fr" else "Profile",
+        options=profile_names,
+        index=profile_names.index(st.session_state.active_user_profile),
+    )
+    if chosen_profile != st.session_state.active_user_profile:
+        st.session_state.active_user_profile = chosen_profile
+        st.rerun()
+    st.caption("Le profil mémorise uniquement les préférences de l'interface. Les réponses et métadonnées FAIR restent dans le classeur de chaque demande." if st.session_state.language == "fr" else "The profile stores interface preferences only. FAIR answers and metadata remain in each request workbook.")
+    with st.expander("Ajouter un autre profil" if st.session_state.language == "fr" else "Add another profile"):
+        st.caption(
+            "Tu peux créer autant de profils que nécessaire. Chaque profil conserve ses propres préférences d'interface."
+            if st.session_state.language == "fr" else
+            "You can create as many profiles as needed. Each profile keeps its own interface preferences."
+        )
+        with st.form("create_user_profile_form", clear_on_submit=True):
+            new_profile_name = st.text_input(
+                "Nom du nouveau profil" if st.session_state.language == "fr" else "New profile name",
+                placeholder="Ex. Marie, Jean, Chriso…" if st.session_state.language == "fr" else "e.g. Marie, Jean, Chris…",
+            )
+            create_profile_submitted = st.form_submit_button(
+                "Ajouter le profil" if st.session_state.language == "fr" else "Add profile",
+                use_container_width=True,
+            )
+        if create_profile_submitted:
+            clean_name = new_profile_name.strip()
+            if not clean_name:
+                st.warning("Saisis un nom de profil." if st.session_state.language == "fr" else "Enter a profile name.")
+            elif any(existing.casefold() == clean_name.casefold() for existing in profile_names):
+                st.warning("Ce profil existe déjà. Choisis un autre nom." if st.session_state.language == "fr" else "This profile already exists. Choose another name.")
+            elif not profile_storage_ok:
+                st.error("Le stockage Nextcloud des profils n'est pas disponible." if st.session_state.language == "fr" else "Nextcloud profile storage is unavailable.")
+            else:
+                # A new profile starts with the current interface preferences,
+                # then evolves independently. FAIR answers and protocol text are excluded.
+                profile_payload["profiles"][clean_name] = {"preferences": get_profile_preferences()}
+                try:
+                    save_user_profiles(profile_payload)
+                    st.session_state.active_user_profile = clean_name
+                    st.session_state.pop("_loaded_user_profile", None)
+                    st.rerun()
+                except Exception as exc:
+                    profile_payload["profiles"].pop(clean_name, None)
+                    st.error(("Impossible de créer le profil : " if st.session_state.language == "fr" else "Could not create profile: ") + str(exc))
+
     st.selectbox(
         TRANSLATIONS[st.session_state.language]["language"],
         options=["fr", "en"],
@@ -1783,8 +1910,15 @@ with st.sidebar:
         ("FAIR" if st.session_state.language == "fr" else "FAIR"): "fair",
         ("Administrateur" if st.session_state.language == "fr" else "Administrator"): "admin",
     }
-    selected_page = st.radio("Navigation", list(page_labels), label_visibility="collapsed")
+    reverse_page_labels = {value: label for label, value in page_labels.items()}
+    saved_page = st.session_state.get("navigation_page", "request")
+    selected_page = st.radio(
+        "Navigation", list(page_labels),
+        index=list(page_labels).index(reverse_page_labels.get(saved_page, list(page_labels)[0])),
+        label_visibility="collapsed",
+    )
     page = page_labels[selected_page]
+    st.session_state["navigation_page"] = page
 
 if st.query_params.get("fair_token"):
     try:
@@ -1806,3 +1940,12 @@ elif page == "fair":
     render_fair_portal()
 else:
     render_form()
+
+# Persist interface preferences after each Streamlit interaction/rerun.
+# FAIR workbook contents and request form answers are never copied into profiles.
+if profile_storage_ok and st.session_state.get("active_user_profile") in profile_payload.get("profiles", {}):
+    try:
+        profile_payload["profiles"][st.session_state.active_user_profile]["preferences"] = get_profile_preferences()
+        save_user_profiles(profile_payload)
+    except Exception as profile_save_exc:
+        st.sidebar.warning(("Préférences non enregistrées dans Nextcloud : " if st.session_state.language == "fr" else "Preferences were not saved to Nextcloud: ") + str(profile_save_exc))

@@ -47,3 +47,18 @@ Mise à jour — Menu FAIR avec choix du rôle
 
 
 Version 1.4 - Navigation FAIR : sélectionner d'abord la feuille (Sample, Analysis, Data treatment, Pipeline Step by Step), puis dans Sample choisir Demandeur ou Administrateur. Les deux rôles n'affichent que leurs propres champs.
+
+
+PROFILS UTILISATEURS (v1.8)
+--------------------------
+Les préférences de l'interface sont enregistrées automatiquement dans le fichier
+MyDrive/user_profiles.json sur le Nextcloud configuré. Le premier profil créé
+automatiquement est « Chriso ». Autant de profils supplémentaires que nécessaire peuvent être créés depuis la
+barre latérale, dans « Ajouter un autre profil ». Un nouveau profil reprend les
+préférences actuelles au moment de sa création, puis évolue indépendamment. Les profils mémorisent la langue, la page/feuille FAIR, le rôle
+sélectionné et les choix de protocoles prédéfinis. Ils ne stockent pas les réponses
+des formulaires, les métadonnées FAIR, les descriptions de protocole modifiées,
+les mots de passe ni les informations des demandes.
+
+Un nom de profil est un moyen de retrouver des préférences, pas un mécanisme
+d'authentification : ne pas y stocker d'informations confidentielles.
