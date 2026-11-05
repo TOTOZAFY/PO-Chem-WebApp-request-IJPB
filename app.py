@@ -2211,7 +2211,7 @@ def render_fair_profile_manager(sheet):
                     profile_payload["profiles"].pop(clean_name, None)
                     st.error(("Impossible de créer le profil : " if fr else "Could not create profile: ") + str(exc))
 
-    with st.expander("Ajouter un utilisateur" if fr else "Add a user"):
+    with st.expander("Ajouter un utilisateur" if fr else "Add a profil"):
         st.caption(
             "Le nouvel utilisateur reprend les préférences du dernier profil actif pour Analysis, Data Treatment et Pipeline Step by Step. Chaque utilisateur pourra ensuite modifier ses propres préférences."
             if fr else
