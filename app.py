@@ -969,16 +969,23 @@ def render_fair_data_treatment(record, records):
                 section = str(left_section).strip()
             label_pos = ws.cell(row, 2).value
             label_neg = ws.cell(row, 6).value
-            if label_pos is None and label_neg is None:
+            pos_cell = ws.cell(row, 3)
+            neg_cell = ws.cell(row, 7)
+            # Some rows are section/mode headings merged across the value columns.
+            # MergedCell objects are read-only; expose only actual writable value cells.
+            pos_writable = not isinstance(pos_cell, MergedCell)
+            neg_writable = not isinstance(neg_cell, MergedCell)
+            if (label_pos is None and label_neg is None) or not (pos_writable or neg_writable):
                 continue
             label = str(label_pos or label_neg).strip()
-            # Use column C for POS and G for NEG, matching the original workbook layout.
             entries.append({
                 "row": row,
                 "section": section,
                 "parameter": label,
-                "pos": "" if ws.cell(row, 3).value is None else str(ws.cell(row, 3).value),
-                "neg": "" if ws.cell(row, 7).value is None else str(ws.cell(row, 7).value),
+                "pos": "" if not pos_writable or pos_cell.value is None else str(pos_cell.value),
+                "neg": "" if not neg_writable or neg_cell.value is None else str(neg_cell.value),
+                "pos_writable": pos_writable,
+                "neg_writable": neg_writable,
             })
 
         form_tab, table_tab = st.tabs(["Formulaire web" if fr else "Web form", "Tableau complet POS / NEG" if fr else "Full POS / NEG table"])
@@ -1005,7 +1012,9 @@ def render_fair_data_treatment(record, records):
                 ws["B2"] = general_values["B2"]
                 ws["B3"] = general_values["B3"]
                 for (row, mode), value in form_values.items():
-                    ws.cell(row, 3 if mode == "pos" else 7).value = value.strip() if isinstance(value, str) else value
+                    target = ws.cell(row, 3 if mode == "pos" else 7)
+                    if not isinstance(target, MergedCell):
+                        target.value = value.strip() if isinstance(value, str) else value
                 save_fair_workbook(record, wb)
                 save_metadata(records)
                 st.success("Data treatment enregistré dans le classeur FAIR." if fr else "Data treatment saved to the FAIR workbook.")
@@ -1039,8 +1048,12 @@ def render_fair_data_treatment(record, records):
                 ws["B3"] = table_general["B3"]
                 for _, line in edited.iterrows():
                     row = int(line["Ligne Excel"])
-                    ws.cell(row, 3).value = "" if pd.isna(line["POS"]) else str(line["POS"])
-                    ws.cell(row, 7).value = "" if pd.isna(line["NEG"]) else str(line["NEG"])
+                    pos_target = ws.cell(row, 3)
+                    neg_target = ws.cell(row, 7)
+                    if not isinstance(pos_target, MergedCell):
+                        pos_target.value = "" if pd.isna(line["POS"]) else str(line["POS"])
+                    if not isinstance(neg_target, MergedCell):
+                        neg_target.value = "" if pd.isna(line["NEG"]) else str(line["NEG"])
                 save_fair_workbook(record, wb)
                 save_metadata(records)
                 st.success("Data treatment enregistré dans le classeur FAIR." if fr else "Data treatment saved to the FAIR workbook.")
@@ -2097,11 +2110,11 @@ def render_fair_profile_manager(sheet):
         if fr else
         f"The profile stores only FAIR → {sheet} interface preferences. Answers and metadata remain in each request's FAIR workbook."
     )
-    with st.expander("Ajouter un autre profil" if fr else "Add another profile"):
+    with st.expander("Enregistrer sous un nouveau profil" if fr else "Save as a new profile"):
         st.caption(
-            "Chaque profil conserve séparément ses préférences pour Analysis, Data Treatment et Pipeline Step by Step."
+            "Crée une copie de tes préférences actuelles pour les trois feuilles : Analysis, Data Treatment et Pipeline Step by Step. Les données FAIR ne sont jamais copiées."
             if fr else
-            "Each profile keeps separate preferences for Analysis, Data Treatment and Pipeline Step by Step."
+            "Create a copy of your current preferences for all three sheets: Analysis, Data Treatment and Pipeline Step by Step. FAIR data are never copied."
         )
         with st.form(f"create_user_profile_form_{sheet.lower().replace(' ', '_')}", clear_on_submit=True):
             new_profile_name = st.text_input(
@@ -2109,7 +2122,7 @@ def render_fair_profile_manager(sheet):
                 placeholder="Ex. Marie, Jean, Chriso…" if fr else "e.g. Marie, Jean, Chris…",
             )
             create_profile_submitted = st.form_submit_button(
-                "Ajouter le profil" if fr else "Add profile", use_container_width=True
+                "Enregistrer sous" if fr else "Save as", use_container_width=True
             )
         if create_profile_submitted:
             clean_name = new_profile_name.strip()
@@ -2120,9 +2133,13 @@ def render_fair_profile_manager(sheet):
             elif not profile_storage_ok:
                 st.error("Le stockage Nextcloud des profils n'est pas disponible." if fr else "Nextcloud profile storage is unavailable.")
             else:
-                profile_payload["profiles"][clean_name] = {
-                    "preferences_by_sheet": {sheet: get_profile_preferences(sheet)}
-                }
+                import copy
+                active_data = profile_payload["profiles"].get(st.session_state.active_user_profile, {})
+                copied_preferences = copy.deepcopy(active_data.get("preferences_by_sheet", {}))
+                if "preferences" in active_data and "Analysis" not in copied_preferences:
+                    copied_preferences["Analysis"] = copy.deepcopy(active_data["preferences"])
+                copied_preferences[sheet] = get_profile_preferences(sheet)
+                profile_payload["profiles"][clean_name] = {"preferences_by_sheet": copied_preferences}
                 try:
                     save_user_profiles(profile_payload)
                     st.session_state.active_user_profile = clean_name
@@ -2131,6 +2148,64 @@ def render_fair_profile_manager(sheet):
                 except Exception as exc:
                     profile_payload["profiles"].pop(clean_name, None)
                     st.error(("Impossible de créer le profil : " if fr else "Could not create profile: ") + str(exc))
+
+    with st.expander("Renommer le profil actif" if fr else "Rename active profile"):
+        with st.form(f"rename_user_profile_form_{sheet.lower().replace(' ', '_')}"):
+            renamed_profile = st.text_input(
+                "Nouveau nom" if fr else "New name",
+                value=st.session_state.active_user_profile,
+            )
+            rename_submitted = st.form_submit_button("Renommer" if fr else "Rename", use_container_width=True)
+        if rename_submitted:
+            clean_name = renamed_profile.strip()
+            old_name = st.session_state.active_user_profile
+            if not clean_name:
+                st.warning("Saisis un nom." if fr else "Enter a name.")
+            elif clean_name.casefold() != old_name.casefold() and any(n.casefold() == clean_name.casefold() for n in profile_names):
+                st.warning("Ce nom de profil existe déjà." if fr else "That profile name already exists.")
+            elif not profile_storage_ok:
+                st.error("Le stockage Nextcloud des profils n'est pas disponible." if fr else "Nextcloud profile storage is unavailable.")
+            else:
+                profile_payload["profiles"][clean_name] = profile_payload["profiles"].pop(old_name)
+                try:
+                    save_user_profiles(profile_payload)
+                    st.session_state.active_user_profile = clean_name
+                    st.session_state.pop(loaded_marker, None)
+                    st.rerun()
+                except Exception as exc:
+                    profile_payload["profiles"][old_name] = profile_payload["profiles"].pop(clean_name)
+                    st.error(("Impossible de renommer le profil : " if fr else "Could not rename profile: ") + str(exc))
+
+    with st.expander("Supprimer un profil" if fr else "Delete a profile"):
+        if len(profile_names) <= 1:
+            st.caption("Il faut conserver au moins un profil." if fr else "At least one profile must be kept.")
+        else:
+            st.warning(
+                f"Le profil actif « {st.session_state.active_user_profile} » et ses préférences seront supprimés définitivement."
+                if fr else
+                f"The active profile '{st.session_state.active_user_profile}' and its preferences will be permanently deleted."
+            )
+            with st.form(f"delete_user_profile_form_{sheet.lower().replace(' ', '_')}"):
+                confirm_delete = st.checkbox("Je confirme la suppression" if fr else "I confirm deletion")
+                delete_submitted = st.form_submit_button("Supprimer le profil actif" if fr else "Delete active profile", use_container_width=True)
+            if delete_submitted:
+                if not confirm_delete:
+                    st.warning("Coche la confirmation avant de supprimer." if fr else "Check the confirmation box before deleting.")
+                elif not profile_storage_ok:
+                    st.error("Le stockage Nextcloud des profils n'est pas disponible." if fr else "Nextcloud profile storage is unavailable.")
+                else:
+                    old_name = st.session_state.active_user_profile
+                    removed = profile_payload["profiles"].pop(old_name, None)
+                    try:
+                        save_user_profiles(profile_payload)
+                        remaining = sorted(profile_payload["profiles"].keys(), key=str.casefold)
+                        st.session_state.active_user_profile = remaining[0]
+                        st.session_state.pop(loaded_marker, None)
+                        st.rerun()
+                    except Exception as exc:
+                        if removed is not None:
+                            profile_payload["profiles"][old_name] = removed
+                        st.error(("Impossible de supprimer le profil : " if fr else "Could not delete profile: ") + str(exc))
 
 # Main navigation. Keep the internal page key explicit so the routing below
 # never references an undefined `page` variable.
