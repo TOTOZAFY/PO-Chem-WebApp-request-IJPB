@@ -4,6 +4,7 @@ Fichiers à placer à la racine du dépôt GitHub :
 - app.py
 - requirements.txt
 - template_E-GES-01.docx
+- FAIR_template.xlsx
 
 Nouveauté — Types d'analyse entièrement bilingues :
 - Lorsqu'il ajoute un type, l'administrateur saisit le libellé français et sa traduction anglaise.
@@ -28,3 +29,21 @@ Module FAIR – Sample (première version)
 - L'administrateur peut importer les File IDs à partir du modèle administrateur ; les IDs inconnus sont refusés.
 - La suppression définitive d'une demande supprime aussi son classeur FAIR associé.
 - Les anciennes demandes, créées avant ce module, peuvent utiliser « Créer / vérifier le classeur FAIR » pour créer leur classeur à partir du modèle.
+
+
+Nouveauté — Menu principal FAIR
+- Un menu FAIR est maintenant visible dans la navigation principale, côté demandeur et administrateur.
+- Le demandeur saisit la référence de sa demande et l'adresse e-mail utilisée lors de la soumission. La combinaison des deux identifie sa demande et ouvre uniquement son classeur FAIR.
+- L'administrateur authentifié peut sélectionner une demande directement depuis le menu FAIR.
+- Le menu présente les quatre feuilles du classeur : Sample, Analysis, Data treatment et Pipeline Step by Step. Seule la feuille Sample est modifiable à ce stade ; les trois autres sont affichées comme à venir.
+- L'e-mail de demande de remplissage FAIR indique la référence de la demande, explique comment accéder au menu FAIR et conserve également le lien direct sécurisé.
+
+Mise à jour — Menu FAIR avec choix du rôle
+- Le menu principal FAIR commence par un choix explicite Demandeur / Administrateur.
+- Dans Demandeur, l'utilisateur saisit la référence de sa demande et son adresse e-mail ; il ne voit que les champs qui lui sont destinés dans Sample (Plant Collection et métadonnées des échantillons). Les File IDs administrateur ne sont jamais affichés ni modifiables.
+- Dans Administrateur, une authentification par ADMIN_PASSWORD est demandée dans le menu FAIR. L'administrateur sélectionne ensuite une demande et ne voit que les champs qui lui sont réservés dans Sample (ID tube analyse et File ID Q-Tof ESI+ / ESI-), avec édition en tableau et import Excel/CSV.
+- Les feuilles Analysis, Data treatment et Pipeline Step by Step restent visibles comme sections à venir. Leur contenu sera développé ultérieurement.
+- Les deux rôles modifient le même classeur FAIR sur Nextcloud ; la fusion est effectuée par ID tube analyse et les champs de l'autre rôle sont préservés.
+
+
+Version 1.4 - Navigation FAIR : sélectionner d'abord la feuille (Sample, Analysis, Data treatment, Pipeline Step by Step), puis dans Sample choisir Demandeur ou Administrateur. Les deux rôles n'affichent que leurs propres champs.

@@ -729,6 +729,167 @@ def render_fair_requester(record, records):
         st.error(("Impossible de charger le fichier FAIR : " if fr else "Could not load FAIR workbook: ") + str(exc))
 
 
+
+def render_fair_administrator(record, records):
+    """Administrator-only FAIR fields. Requester-owned metadata are never displayed here."""
+    fr = st.session_state.get("language", "fr") == "fr"
+    st.title("FAIR – Espace administrateur" if fr else "FAIR – Administrator area")
+    st.caption(("Demande : " if fr else "Request: ") + str(record.get("id", "")))
+    try:
+        wb = load_fair_workbook(record)
+        ws = wb["Sample"]
+        rows = sample_rows(ws)
+        id_row = rows.get("ID tube analyse")
+        plus_row = rows.get("File ID Q-Tof ESI+")
+        minus_row = rows.get("File ID Q-Tof ESI-")
+        if not id_row or not plus_row or not minus_row:
+            st.error("Les lignes ID tube analyse / File ID sont introuvables dans Sample." if fr else "ID tube analyse / File ID rows are missing from Sample.")
+            return
+        st.subheader("Sample – Informations réservées à l'administrateur" if fr else "Sample – Administrator-only information")
+        st.info("Seuls les identifiants de fichiers instrumentaux sont affichés ici. Les métadonnées saisies par le demandeur restent masquées et sont conservées." if fr else "Only instrument file identifiers are shown here. Requester metadata remain hidden and are preserved.")
+        records_table = []
+        for col in range(2, ws.max_column + 1):
+            tube = ws.cell(id_row, col).value
+            if tube not in (None, ""):
+                records_table.append({
+                    "ID tube analyse": str(tube),
+                    "File ID Q-Tof ESI+": ws.cell(plus_row, col).value or "",
+                    "File ID Q-Tof ESI-": ws.cell(minus_row, col).value or "",
+                })
+        import pandas as pd
+        frame = pd.DataFrame(records_table, columns=["ID tube analyse", "File ID Q-Tof ESI+", "File ID Q-Tof ESI-"])
+        edited = st.data_editor(frame, use_container_width=True, hide_index=True, disabled=["ID tube analyse"], key=f"fair_admin_editor_{record.get('id')}")
+        if st.button("Enregistrer les File IDs" if fr else "Save File IDs", key=f"fair_admin_editor_save_{record.get('id')}"):
+            try:
+                fair_merge_samples(ws, edited.fillna("").to_dict(orient="records"), requester=False)
+                save_fair_workbook(record, wb)
+                save_metadata(records)
+                st.success("File IDs enregistrés." if fr else "File IDs saved.")
+            except Exception as exc:
+                st.error(str(exc))
+        with st.expander("Importer les File IDs depuis Excel/CSV" if fr else "Import File IDs from Excel/CSV"):
+            upload = st.file_uploader("Excel / CSV", type=["xlsx", "xlsm", "csv", "tsv"], key=f"fair_admin_import_{record.get('id')}")
+            if upload and st.button("Importer les File IDs" if fr else "Import File IDs", key=f"fair_admin_import_btn_{record.get('id')}"):
+                try:
+                    incoming = parse_sample_upload(upload)
+                    existing = {str(ws.cell(id_row, c).value).strip() for c in range(2, ws.max_column + 1) if ws.cell(id_row, c).value not in (None, "")}
+                    unknown = [str(item.get("ID tube analyse", "")).strip() for item in incoming if str(item.get("ID tube analyse", "")).strip() not in existing]
+                    if unknown:
+                        raise ValueError(("ID tube analyse inconnu(s) : " if fr else "Unknown sample ID(s): ") + ", ".join(unknown))
+                    admin_rows = [{k: v for k, v in item.items() if k in {"ID tube analyse", "File ID Q-Tof ESI+", "File ID Q-Tof ESI-"}} for item in incoming]
+                    fair_merge_samples(ws, admin_rows, requester=False)
+                    save_fair_workbook(record, wb)
+                    save_metadata(records)
+                    st.success("File IDs importés." if fr else "File IDs imported.")
+                except Exception as exc:
+                    st.error(str(exc))
+    except Exception as exc:
+        st.error(("Impossible de charger le fichier FAIR : " if fr else "Could not load FAIR workbook: ") + str(exc))
+
+
+def render_fair_portal():
+    """FAIR navigation: choose a sheet first, then a role within that sheet."""
+    fr = st.session_state.get("language", "fr") == "fr"
+    st.title("FAIR")
+
+    # First level: FAIR workbook sheets.
+    sheet_options = ["Sample", "Analysis", "Data treatment", "Pipeline Step by Step"]
+    selected_sheet = st.selectbox(
+        "Feuille FAIR" if fr else "FAIR sheet",
+        options=sheet_options,
+        key="fair_selected_sheet",
+    )
+
+    if selected_sheet != "Sample":
+        st.subheader(selected_sheet)
+        st.info(
+            "Cette feuille sera développée dans une prochaine étape. Pour le moment, seule la feuille Sample est opérationnelle."
+            if fr else
+            "This sheet will be implemented in a later phase. For now, only the Sample sheet is operational."
+        )
+        return
+
+    st.divider()
+    st.subheader("Sample")
+    # Second level: choose who is completing the Sample sheet.
+    role = st.selectbox(
+        "Qui souhaite compléter la feuille Sample ?" if fr else "Who is completing the Sample sheet?",
+        options=["Demandeur", "Administrateur"] if fr else ["Requester", "Administrator"],
+        key="fair_sample_role",
+    )
+
+    records = load_metadata()
+    active_records = [r for r in records if not r.get("deleted", False)]
+
+    requester_role = "Demandeur" if fr else "Requester"
+    if role == requester_role:
+        st.write(
+            "Saisissez la référence de votre demande et l'adresse e-mail utilisée lors de sa création. Vous accéderez uniquement aux champs à compléter par le demandeur."
+            if fr else
+            "Enter your request reference and the email address used when submitting it. You will only access fields assigned to the requester."
+        )
+        with st.form("fair_sample_requester_access_form"):
+            reference = st.text_input("Référence de la demande" if fr else "Request reference")
+            email = st.text_input("Adresse e-mail du demandeur" if fr else "Requester email address")
+            submitted = st.form_submit_button("Accéder à Sample" if fr else "Open Sample")
+        if submitted:
+            norm_ref, norm_email = reference.strip().casefold(), email.strip().casefold()
+            record = next((r for r in active_records
+                           if str(r.get("id", "")).strip().casefold() == norm_ref
+                           and str(r.get("manager_email", "")).strip().casefold() == norm_email), None)
+            if not record:
+                st.error("Référence ou adresse e-mail incorrecte. Vérifiez les informations indiquées." if fr else "Reference or email address not recognized. Please check your details.")
+                return
+            if record.get("fair_status") not in ("requested", "in_progress", "completed"):
+                st.warning("Le remplissage FAIR n'a pas encore été demandé par l'administrateur." if fr else "The administrator has not requested FAIR completion yet.")
+                return
+            st.session_state["fair_sample_requester_id"] = record.get("id")
+            st.rerun()
+
+        saved_id = st.session_state.get("fair_sample_requester_id")
+        record = next((r for r in active_records if str(r.get("id")) == str(saved_id)), None) if saved_id else None
+        if record and record.get("fair_status") in ("requested", "in_progress", "completed"):
+            st.divider()
+            render_fair_requester(record, records)
+        return
+
+    # Administrator authentication is scoped to the Sample administrator area.
+    st.write(
+        "L'administrateur peut compléter uniquement les champs qui lui sont réservés dans Sample."
+        if fr else
+        "The administrator can complete only the fields assigned to them in Sample."
+    )
+    admin_password = get_secret("ADMIN_PASSWORD", "")
+    if not admin_password:
+        st.error("Le secret ADMIN_PASSWORD n'est pas configuré." if fr else "ADMIN_PASSWORD secret is not configured.")
+        return
+    if not st.session_state.get("fair_sample_admin_authenticated", False):
+        with st.form("fair_sample_admin_login_form"):
+            password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
+            login = st.form_submit_button("Se connecter" if fr else "Log in")
+        if login:
+            if password == str(admin_password):
+                st.session_state["fair_sample_admin_authenticated"] = True
+                st.rerun()
+            else:
+                st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+        return
+
+    if st.button("Se déconnecter de Sample administrateur" if fr else "Log out of Sample administrator"):
+        st.session_state["fair_sample_admin_authenticated"] = False
+        st.session_state.pop("fair_sample_admin_request_id", None)
+        st.rerun()
+
+    if not active_records:
+        st.info("Aucune demande disponible." if fr else "No requests available.")
+        return
+    labels = {f"{r.get('id', '')} — {r.get('project_name', '')} — {r.get('project_manager', '')}": r for r in active_records}
+    selected = st.selectbox("Sélectionner une demande" if fr else "Select a request", list(labels), key="fair_sample_admin_request_select")
+    record = labels[selected]
+    st.session_state["fair_sample_admin_request_id"] = record.get("id")
+    render_fair_administrator(record, records)
+
+
 def render_admin():
     st.title(t("admin_title"))
     admin_password = get_secret("ADMIN_PASSWORD", "")
@@ -990,7 +1151,22 @@ def render_admin():
                         else:
                             link = f"{app_url}/?fair_token={record['fair_token']}"
                             subject = "Compléter les métadonnées FAIR – " + record.get("project_name", "")
-                            body = ("Bonjour " if st.session_state.language == "fr" else "Hello ") + record.get("project_manager", "") + ",\n\n" + ("Merci de compléter les métadonnées FAIR des échantillons via ce lien :\n" if st.session_state.language == "fr" else "Please complete the FAIR sample metadata using this link:\n") + link
+                            if st.session_state.language == "fr":
+                                body = (
+                                    "Bonjour " + record.get("project_manager", "") + ",\n\n"
+                                    "Merci de compléter les métadonnées FAIR de votre demande.\n"
+                                    "Référence de votre demande : " + str(record.get("id", "")) + "\n"
+                                    "Vous pouvez ouvrir l'application, choisir le menu FAIR, puis saisir cette référence et votre adresse e-mail de demandeur.\n\n"
+                                    "Accès direct sécurisé :\n" + link
+                                )
+                            else:
+                                body = (
+                                    "Hello " + record.get("project_manager", "") + ",\n\n"
+                                    "Please complete the FAIR metadata for your request.\n"
+                                    "Your request reference: " + str(record.get("id", "")) + "\n"
+                                    "Open the application, select the FAIR menu, then enter this reference and your requester email address.\n\n"
+                                    "Secure direct access: \n" + link
+                                )
                             send_email(record.get("manager_email", ""), subject, body)
                             record["fair_status"] = "requested"; record["fair_requested_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
                             save_metadata(records)
@@ -1487,7 +1663,13 @@ with st.sidebar:
         format_func=lambda x: "Français" if x == "fr" else "English",
         key="language",
     )
-    page = st.radio(t("form"), [t("form"), t("admin")], label_visibility="collapsed")
+    page_labels = {
+        ("Demande" if st.session_state.language == "fr" else "Request"): "request",
+        ("FAIR" if st.session_state.language == "fr" else "FAIR"): "fair",
+        ("Administrateur" if st.session_state.language == "fr" else "Administrator"): "admin",
+    }
+    selected_page = st.radio("Navigation", list(page_labels), label_visibility="collapsed")
+    page = page_labels[selected_page]
 
 if st.query_params.get("fair_token"):
     try:
@@ -1503,7 +1685,9 @@ if st.query_params.get("fair_token"):
             render_fair_requester(fair_record, fair_records)
     except Exception as exc:
         st.error(f"FAIR: {exc}")
-elif page == t("admin"):
+elif page == "admin":
     render_admin()
+elif page == "fair":
+    render_fair_portal()
 else:
     render_form()
