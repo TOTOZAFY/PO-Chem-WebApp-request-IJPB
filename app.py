@@ -1180,6 +1180,43 @@ def render_fair_pipeline_step(record, records):
             })
         st.caption("Modifiez le statut et ajoutez des précisions pour chaque étape. Les étapes et modes POS/NEG du modèle sont conservés." if fr else "Edit the status and add details for each step. The template steps and POS/NEG modes are retained.")
         df = pd.DataFrame(rows)
+
+        # Bulk status assignment: all workflow rows or a user-selected subset.
+        st.subheader("Affectation groupée des états" if fr else "Bulk status assignment")
+        bulk_scope = st.radio(
+            "Appliquer l'état à" if fr else "Apply status to",
+            ["Toutes les lignes", "Uniquement les étapes sélectionnées"] if fr else ["All rows", "Selected steps only"],
+            horizontal=True, key=f"pipeline_bulk_scope_{record.get('id')}"
+        )
+        step_choices = {
+            f"L{int(row['Ligne Excel'])} – {row['Étape']} ({row['Mode']})": int(row['Ligne Excel'])
+            for row in rows
+        }
+        selected_labels = []
+        if bulk_scope != ("Toutes les lignes" if fr else "All rows"):
+            selected_labels = st.multiselect(
+                "Étapes concernées" if fr else "Steps to update",
+                list(step_choices), key=f"pipeline_bulk_rows_{record.get('id')}"
+            )
+        bulk_states = ["Oui", "Non", "Partiel", "N/A"] if fr else ["Yes", "No", "Partial", "N/A"]
+        bulk_status = st.selectbox(
+            "État à appliquer" if fr else "Status to apply", bulk_states,
+            key=f"pipeline_bulk_status_{record.get('id')}"
+        )
+        if st.button("Appliquer et enregistrer l'état" if fr else "Apply and save status", type="secondary", key=f"pipeline_bulk_apply_{record.get('id')}"):
+            if bulk_scope != ("Toutes les lignes" if fr else "All rows") and not selected_labels:
+                st.warning("Sélectionnez au moins une étape." if fr else "Select at least one step.")
+            else:
+                target_rows = set(step_choices.values()) if bulk_scope == ("Toutes les lignes" if fr else "All rows") else {step_choices[label] for label in selected_labels}
+                for row_number in target_rows:
+                    ws.cell(row_number, 3).value = bulk_status
+                ws[mode_cell] = "Mode"
+                ws[mode_value_cell] = "Interactive table"
+                save_fair_workbook(record, wb)
+                save_metadata(records)
+                st.success((f"État '{bulk_status}' appliqué à {len(target_rows)} ligne(s)." if fr else f"Status '{bulk_status}' applied to {len(target_rows)} row(s)."))
+                st.rerun()
+
         edited = st.data_editor(
             df, use_container_width=True, hide_index=True, num_rows="fixed",
             disabled=["Ligne Excel", "Étape", "Mode"],
