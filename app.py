@@ -597,6 +597,18 @@ def fair_remote_path(record):
     return f"{FAIR_FOLDER}/{fair_filename(record)}"
 
 
+def remove_formatting_from_empty_cells(workbook):
+    """Keep empty spreadsheet cells visually blank: no fill, borders or other styling."""
+    for worksheet in workbook.worksheets:
+        for row in worksheet.iter_rows(
+            min_row=1, max_row=worksheet.max_row,
+            min_col=1, max_col=worksheet.max_column
+        ):
+            for cell in row:
+                if cell.value is None:
+                    cell._style = None
+
+
 def create_fair_workbook(record):
     if not os.path.isfile(FAIR_TEMPLATE_PATH):
         raise FileNotFoundError("FAIR_template.xlsx is missing")
@@ -611,6 +623,7 @@ def create_fair_workbook(record):
     ws["B2"] = (record.get("submitted_at", "") or record.get("request_date", ""))[:10]
     ws["B3"] = record.get("id", "")
     ws["B4"] = record.get("analysis_type", "")
+    remove_formatting_from_empty_cells(wb)
     output = BytesIO()
     wb.save(output)
     return output.getvalue()
@@ -630,6 +643,7 @@ def load_fair_workbook(record):
 
 
 def save_fair_workbook(record, workbook):
+    remove_formatting_from_empty_cells(workbook)
     output = BytesIO()
     workbook.save(output)
     path = record.get("fair_path") or fair_remote_path(record)
