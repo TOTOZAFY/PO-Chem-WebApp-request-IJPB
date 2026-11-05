@@ -62,3 +62,6 @@ les mots de passe ni les informations des demandes.
 
 Un nom de profil est un moyen de retrouver des préférences, pas un mécanisme
 d'authentification : ne pas y stocker d'informations confidentielles.
+
+Version 2.8 – Data Treatment modes
+La feuille FAIR Data treatment propose maintenant deux choix : traitement par MZmine (formulaire et tableau POS/NEG existants) ou traitement personnalisé (champ texte libre). Les deux jeux d'informations sont conservés lorsque l'utilisateur change de méthode.

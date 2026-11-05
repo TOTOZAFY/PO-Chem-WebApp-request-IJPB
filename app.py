@@ -975,6 +975,44 @@ def render_fair_data_treatment(record, records):
             return
         ws = wb["Data treatment"]
 
+        # The selected treatment workflow and free-text method are stored in
+        # dedicated FAIR cells below the existing MZmine parameter block.
+        method_cell = "B82"
+        custom_text_cell = "B83"
+        method_label = "Type de traitement des données" if fr else "Data treatment method"
+        custom_label = "Description du traitement personnalisé" if fr else "Custom data treatment description"
+        ws["A82"] = method_label
+        ws["A83"] = custom_label
+        saved_method = str(ws[method_cell].value or "MZmine")
+        saved_custom_text = str(ws[custom_text_cell].value or "")
+        method_options = ["Traitement de données par MZmine", "Traitement de données personnalisé"] if fr else ["MZmine data processing", "Custom data processing"]
+        default_method = method_options[1] if saved_method.lower() in ("custom", "personnalisé", method_options[1].lower()) else method_options[0]
+        selected_method = st.radio(
+            "Choisir le type de traitement" if fr else "Choose the data treatment type",
+            method_options,
+            index=method_options.index(default_method),
+            key=f"fair_data_treatment_pref_method_{record.get('id')}"
+        )
+        is_custom = selected_method == method_options[1]
+        if is_custom:
+            st.markdown("**" + custom_label + "**")
+            custom_description = st.text_area(
+                "Décrivez toutes les étapes, logiciels, versions, paramètres, normalisations et filtres utilisés. Vous pouvez coller votre protocole complet ici." if fr else
+                "Describe all steps, software, versions, parameters, normalization and filters used. You can paste your complete protocol here.",
+                value=saved_custom_text,
+                height=320,
+                key=f"fair_data_treatment_pref_custom_text_{record.get('id')}"
+            )
+            if st.button("Enregistrer le traitement personnalisé" if fr else "Save custom data treatment", type="primary", key=f"dt_custom_save_{record.get('id')}"):
+                ws[method_cell] = "Personnalisé" if fr else "Custom"
+                ws[custom_text_cell] = custom_description.strip()
+                save_fair_workbook(record, wb)
+                save_metadata(records)
+                st.success("Le traitement personnalisé a été enregistré dans le classeur FAIR." if fr else "Custom data treatment has been saved to the FAIR workbook.")
+            return
+        # MZmine mode: keep both the guided web form and the full POS/NEG table.
+        # Switching to custom never deletes the MZmine values already stored below.
+
         # General fields stored once, before the POS/NEG parameter blocks.
         general = {"B2": str(ws["B2"].value or ""), "B3": str(ws["B3"].value or "")}
         general_labels = {"B2": str(ws["A2"].value or "Data processing by"), "B3": str(ws["A3"].value or "Where is the data stored?")}
@@ -1029,6 +1067,8 @@ def render_fair_data_treatment(record, records):
                         st.text_input("NEG", value=item["neg"], key=f"fair_data_treatment_pref_{item['row']}_neg")
                         form_values[(item["row"], "neg")] = st.session_state.get(f"fair_data_treatment_pref_{item['row']}_neg", item["neg"])
             if st.button("Enregistrer le formulaire Data Treatment" if fr else "Save Data Treatment form", type="primary", key=f"dt_form_save_{record.get('id')}"):
+                ws[method_cell] = "MZmine"
+                ws[custom_text_cell] = saved_custom_text
                 ws["B2"] = general_values["B2"]
                 ws["B3"] = general_values["B3"]
                 for (row, mode), value in form_values.items():
@@ -1064,6 +1104,8 @@ def render_fair_data_treatment(record, records):
                 key="fair_data_treatment_pref_full_table",
             )
             if st.button("Enregistrer le tableau Data Treatment" if fr else "Save Data Treatment table", type="primary", key=f"dt_table_save_{record.get('id')}"):
+                ws[method_cell] = "MZmine"
+                ws[custom_text_cell] = saved_custom_text
                 ws["B2"] = table_general["B2"]
                 ws["B3"] = table_general["B3"]
                 for _, line in edited.iterrows():

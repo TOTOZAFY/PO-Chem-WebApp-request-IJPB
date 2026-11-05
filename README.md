@@ -13,3 +13,8 @@ Version 2.4 adds the FAIR Data treatment entry workflow while preserving the exi
 
 ## Deployment
 Replace the files in the GitHub repository with the contents of this ZIP and allow Streamlit Cloud to redeploy.
+
+## FAIR Data Treatment – v2.8
+- Data Treatment now offers two mutually exclusive workflows: MZmine (existing guided form and POS/NEG table) or Custom (free-text description).
+- The custom description and selected method are saved in the existing FAIR `Data treatment` worksheet (dedicated rows 82–83).
+- Switching between methods preserves the values previously entered for the other method.
