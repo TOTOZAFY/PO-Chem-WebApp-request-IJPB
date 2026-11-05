@@ -2494,17 +2494,23 @@ else:
 _footer_fr = st.session_state.get("language", "fr") == "fr"
 st.sidebar.divider()
 st.sidebar.markdown("**OV-Chimie, Métabolisme**")
-_logo_dir = os.path.join(os.path.dirname(__file__), "platform_logos")
-_logo_path = os.path.join(_logo_dir, "ov_chimie_logo_user.png")
-if os.path.exists(_logo_path):
-    st.sidebar.image(_logo_path, use_container_width=True)
+# One coherent banner containing the OV-Chimie logo and the partner logos.
+# Keep this asset at the application root so it is included in simple ZIP deployments.
+_platform_banner_path = os.path.join(os.path.dirname(__file__), "ov_chimie_logo_user.png")
+if os.path.isfile(_platform_banner_path):
+    st.sidebar.image(_platform_banner_path, use_container_width=True)
+else:
+    st.sidebar.warning(
+        "Logo de la plate-forme introuvable." if _footer_fr
+        else "Platform logo image not found."
+    )
 st.sidebar.markdown(
     "[Site web de la plate-forme](https://green-chemistry-platform.versailles-saclay.hub.inrae.fr/)"
     if _footer_fr else
     "[Platform website](https://green-chemistry-platform.versailles-saclay.hub.inrae.fr/)"
 )
 _charter_path = os.path.join(os.path.dirname(__file__), "Charte E-GES-00-ver4.pdf")
-if os.path.exists(_charter_path):
+if os.path.isfile(_charter_path):
     with open(_charter_path, "rb") as _charter_file:
         st.sidebar.download_button(
             label="Télécharger la charte de la plate-forme (PDF)" if _footer_fr else "Download the platform charter (PDF)",
@@ -2514,26 +2520,6 @@ if os.path.exists(_charter_path):
             key="download_platform_charter_sidebar",
             use_container_width=True,
         )
-# All partner/institutional logos are taken only from template_E-GES-01.docx,
-# alongside the separately supplied OV-Chimie logo above.
-_logo_items = [
-    ("Image 1 du document Word", "image1.png"),
-    ("Image 2 du document Word", "image2.png"),
-    ("Image 3 du document Word", "image3.png"),
-    ("Image 4 du document Word", "image4.png"),
-    ("Image 5 du document Word", "image5.jpeg"),
-    ("Image 6 du document Word", "image6.jpeg"),
-    ("Image 7 du document Word", "image7_emf.png"),
-    ("Image 8 du document Word", "image8.png"),
-]
-# Render each logo explicitly in the sidebar. Calling st.image() here can
-# route the image to the main page rather than the sidebar in some Streamlit
-# versions, leaving the sidebar expander empty. Use the sidebar image API.
-st.sidebar.markdown("**" + ("Logos institutionnels et partenaires" if _footer_fr else "Institutional and partner logos") + "**")
-for _logo_label, _logo_file in _logo_items:
-    _logo_file_path = os.path.join(_logo_dir, _logo_file)
-    if os.path.isfile(_logo_file_path):
-        st.sidebar.image(_logo_file_path, caption=_logo_label, use_container_width=True)
 
 if st.query_params.get("fair_token"):
     try:
