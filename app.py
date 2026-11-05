@@ -955,6 +955,8 @@ def render_fair_analysis(record, records):
             st.success("Les informations de la feuille Analysis ont été enregistrées dans le classeur FAIR." if fr else "Analysis information has been saved to the FAIR workbook.")
     except Exception as exc:
         st.error(("Impossible de charger ou d'enregistrer la feuille Analysis : " if fr else "Could not load or save the Analysis sheet: ") + str(exc))
+    render_keep_preferences_button("Analysis")
+
 
 def render_fair_data_treatment(record, records):
     """Edit the Data treatment worksheet through a guided form or a full POS/NEG table."""
@@ -1121,6 +1123,7 @@ def render_fair_data_treatment(record, records):
                 st.success("Data treatment enregistré dans le classeur FAIR." if fr else "Data treatment saved to the FAIR workbook.")
     except Exception as exc:
         st.error(("Impossible de charger ou d'enregistrer Data treatment : " if fr else "Could not load or save Data treatment: ") + str(exc))
+    render_keep_preferences_button("Data treatment")
 
 
 def render_fair_pipeline_step(record, records):
@@ -1241,6 +1244,7 @@ def render_fair_pipeline_step(record, records):
             st.success("Pipeline Step by Step enregistré dans le classeur FAIR." if fr else "Pipeline Step by Step saved to the FAIR workbook.")
     except Exception as exc:
         st.error(("Impossible de charger ou d'enregistrer Pipeline Step by Step : " if fr else "Could not load or save Pipeline Step by Step: ") + str(exc))
+    render_keep_preferences_button("Pipeline Step by Step")
 
 
 def render_fair_pipeline_access():
@@ -2289,6 +2293,35 @@ if st.session_state.language != _selected_language_code:
 profile_payload = {"profiles": {}}
 profile_storage_ok = False
 profile_names = []
+
+
+
+def render_keep_preferences_button(sheet):
+    """Save the current sheet's interface preferences to the active Nextcloud profile."""
+    fr = st.session_state.get("language", "fr") == "fr"
+    label = "Keep as preference in my profile" if not fr else "Garder comme préférences dans mon profil"
+    if st.button(label, key=f"keep_preferences_{sheet.lower().replace(' ', '_')}", use_container_width=True):
+        try:
+            payload = load_user_profiles()
+            active_name = st.session_state.get("active_user_profile")
+            profiles = payload.get("profiles", {})
+            if not active_name or active_name not in profiles:
+                st.error("Aucun profil actif n'est disponible." if fr else "No active profile is available.")
+                return
+            profile = profiles[active_name]
+            preferences_by_sheet = profile.setdefault("preferences_by_sheet", {})
+            preferences_by_sheet[sheet] = get_profile_preferences(sheet)
+            save_user_profiles(payload)
+            st.success(
+                f"Préférences de {sheet} enregistrées dans le profil « {active_name} »."
+                if fr else
+                f"{sheet} preferences saved to profile '{active_name}'."
+            )
+        except Exception as exc:
+            st.error(
+                ("Impossible d'enregistrer les préférences : " if fr else "Could not save preferences: ")
+                + str(exc)
+            )
 
 def render_fair_profile_manager(sheet):
     """Show and activate a persistent profile within selected FAIR sheets only."""
