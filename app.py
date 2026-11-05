@@ -936,6 +936,167 @@ def render_fair_analysis(record, records):
     except Exception as exc:
         st.error(("Impossible de charger ou d'enregistrer la feuille Analysis : " if fr else "Could not load or save the Analysis sheet: ") + str(exc))
 
+def render_fair_data_treatment(record, records):
+    """Edit the Data treatment worksheet through a guided form or a full POS/NEG table."""
+    import pandas as pd
+
+    fr = st.session_state.get("language", "fr") == "fr"
+    st.title("FAIR – Data treatment")
+    st.caption(("Demande : " if fr else "Request: ") + str(record.get("id", "")))
+    st.info(
+        "Renseignez les paramètres réellement utilisés. Les valeurs déjà présentes dans le modèle sont des exemples modifiables. Les champs non applicables peuvent rester vides."
+        if fr else
+        "Enter the parameters actually used. Values already present in the template are editable examples. Non-applicable fields may be left blank."
+    )
+    try:
+        wb = load_fair_workbook(record)
+        if "Data treatment" not in wb.sheetnames:
+            st.error("La feuille Data treatment est absente du classeur FAIR." if fr else "The Data treatment sheet is missing from the FAIR workbook.")
+            return
+        ws = wb["Data treatment"]
+
+        # General fields stored once, before the POS/NEG parameter blocks.
+        general = {"B2": str(ws["B2"].value or ""), "B3": str(ws["B3"].value or "")}
+        general_labels = {"B2": str(ws["A2"].value or "Data processing by"), "B3": str(ws["A3"].value or "Where is the data stored?")}
+
+        # Each parameter keeps its exact Excel row and its POS/NEG value cells.
+        entries = []
+        section = "General"
+        for row in range(4, ws.max_row + 1):
+            left_section = ws.cell(row, 1).value
+            right_section = ws.cell(row, 5).value
+            if left_section and str(left_section).strip().lower() not in ("mode",):
+                section = str(left_section).strip()
+            label_pos = ws.cell(row, 2).value
+            label_neg = ws.cell(row, 6).value
+            if label_pos is None and label_neg is None:
+                continue
+            label = str(label_pos or label_neg).strip()
+            # Use column C for POS and G for NEG, matching the original workbook layout.
+            entries.append({
+                "row": row,
+                "section": section,
+                "parameter": label,
+                "pos": "" if ws.cell(row, 3).value is None else str(ws.cell(row, 3).value),
+                "neg": "" if ws.cell(row, 7).value is None else str(ws.cell(row, 7).value),
+            })
+
+        form_tab, table_tab = st.tabs(["Formulaire web" if fr else "Web form", "Tableau complet POS / NEG" if fr else "Full POS / NEG table"])
+        with form_tab:
+            st.subheader("Informations générales" if fr else "General information")
+            general_values = {}
+            for cell, label in general_labels.items():
+                general_values[cell] = st.text_input(label, value=general[cell], key=f"fair_data_treatment_pref_general_{cell}")
+            current_section = None
+            form_values = {}
+            for item in entries:
+                if item["section"] != current_section:
+                    current_section = item["section"]
+                    st.markdown(f"**{current_section}**")
+                with st.expander(item["parameter"], expanded=False):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.text_input("POS", value=item["pos"], key=f"fair_data_treatment_pref_{item['row']}_pos")
+                        form_values[(item["row"], "pos")] = st.session_state.get(f"fair_data_treatment_pref_{item['row']}_pos", item["pos"])
+                    with c2:
+                        st.text_input("NEG", value=item["neg"], key=f"fair_data_treatment_pref_{item['row']}_neg")
+                        form_values[(item["row"], "neg")] = st.session_state.get(f"fair_data_treatment_pref_{item['row']}_neg", item["neg"])
+            if st.button("Enregistrer le formulaire Data Treatment" if fr else "Save Data Treatment form", type="primary", key=f"dt_form_save_{record.get('id')}"):
+                ws["B2"] = general_values["B2"]
+                ws["B3"] = general_values["B3"]
+                for (row, mode), value in form_values.items():
+                    ws.cell(row, 3 if mode == "pos" else 7).value = value.strip() if isinstance(value, str) else value
+                save_fair_workbook(record, wb)
+                save_metadata(records)
+                st.success("Data treatment enregistré dans le classeur FAIR." if fr else "Data treatment saved to the FAIR workbook.")
+
+        with table_tab:
+            st.subheader("Tableau complet des paramètres" if fr else "Complete parameter table")
+            table_general = {}
+            g1, g2 = st.columns(2)
+            with g1:
+                table_general["B2"] = st.text_input(general_labels["B2"], value=general["B2"], key="fair_data_treatment_pref_table_general_B2")
+            with g2:
+                table_general["B3"] = st.text_input(general_labels["B3"], value=general["B3"], key="fair_data_treatment_pref_table_general_B3")
+            table_data = [{"Ligne Excel": x["row"], "Section": x["section"], "Paramètre": x["parameter"], "POS": x["pos"], "NEG": x["neg"]} for x in entries]
+            edited = st.data_editor(
+                pd.DataFrame(table_data),
+                use_container_width=True,
+                hide_index=True,
+                num_rows="fixed",
+                disabled=["Ligne Excel", "Section", "Paramètre"],
+                column_config={
+                    "Ligne Excel": st.column_config.NumberColumn("Ligne Excel", width="small"),
+                    "Section": st.column_config.TextColumn("Section", width="medium"),
+                    "Paramètre": st.column_config.TextColumn("Paramètre", width="large"),
+                    "POS": st.column_config.TextColumn("POS", width="medium"),
+                    "NEG": st.column_config.TextColumn("NEG", width="medium"),
+                },
+                key="fair_data_treatment_pref_full_table",
+            )
+            if st.button("Enregistrer le tableau Data Treatment" if fr else "Save Data Treatment table", type="primary", key=f"dt_table_save_{record.get('id')}"):
+                ws["B2"] = table_general["B2"]
+                ws["B3"] = table_general["B3"]
+                for _, line in edited.iterrows():
+                    row = int(line["Ligne Excel"])
+                    ws.cell(row, 3).value = "" if pd.isna(line["POS"]) else str(line["POS"])
+                    ws.cell(row, 7).value = "" if pd.isna(line["NEG"]) else str(line["NEG"])
+                save_fair_workbook(record, wb)
+                save_metadata(records)
+                st.success("Data treatment enregistré dans le classeur FAIR." if fr else "Data treatment saved to the FAIR workbook.")
+    except Exception as exc:
+        st.error(("Impossible de charger ou d'enregistrer Data treatment : " if fr else "Could not load or save Data treatment: ") + str(exc))
+
+
+def render_fair_data_treatment_access():
+    """Reuse the FAIR requester/admin access pattern for Data treatment."""
+    fr = st.session_state.get("language", "fr") == "fr"
+    records = load_metadata()
+    active_records = [r for r in records if not r.get("deleted", False)]
+    role = st.selectbox(
+        "Qui souhaite compléter la feuille Data treatment ?" if fr else "Who is completing the Data treatment sheet?",
+        options=["Demandeur", "Administrateur"] if fr else ["Requester", "Administrator"],
+        key="fair_data_treatment_role",
+    )
+    if role == ("Demandeur" if fr else "Requester"):
+        with st.form("fair_data_treatment_requester_access_form"):
+            reference = st.text_input("Référence de la demande" if fr else "Request reference")
+            email = st.text_input("Adresse e-mail du demandeur" if fr else "Requester email address")
+            submitted = st.form_submit_button("Accéder à Data treatment" if fr else "Open Data treatment")
+        if submitted:
+            record = next((r for r in active_records if str(r.get("id", "")).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
+            if not record:
+                st.error("Référence ou adresse e-mail incorrecte." if fr else "Request reference or email address is incorrect.")
+                return
+            st.session_state["fair_data_treatment_requester_id"] = record.get("id")
+            st.rerun()
+        saved_id = st.session_state.get("fair_data_treatment_requester_id")
+        record = next((r for r in active_records if str(r.get("id")) == str(saved_id)), None) if saved_id else None
+        if record:
+            render_fair_data_treatment(record, records)
+        return
+    admin_password = get_secret("ADMIN_PASSWORD", "")
+    if not admin_password:
+        st.error("Le secret ADMIN_PASSWORD n'est pas configuré." if fr else "ADMIN_PASSWORD secret is not configured.")
+        return
+    if not st.session_state.get("fair_data_treatment_admin_authenticated", False):
+        with st.form("fair_data_treatment_admin_login_form"):
+            password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
+            login = st.form_submit_button("Se connecter" if fr else "Log in")
+        if login and password == admin_password:
+            st.session_state["fair_data_treatment_admin_authenticated"] = True
+            st.rerun()
+        elif login:
+            st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+        return
+    if active_records:
+        choices = {f"{r.get('id')} – {r.get('project_name', '')}": r for r in active_records}
+        selected = st.selectbox("Sélectionner une demande" if fr else "Select a request", list(choices), key="fair_data_treatment_admin_request")
+        render_fair_data_treatment(choices[selected], records)
+    else:
+        st.info("Aucune demande disponible." if fr else "No requests available.")
+
+
 def render_fair_portal():
     """FAIR navigation: choose a sheet first, then a role within that sheet."""
     fr = st.session_state.get("language", "fr") == "fr"
@@ -1001,13 +1162,20 @@ def render_fair_portal():
             st.info("Aucune demande disponible." if fr else "No requests available.")
         return
 
-    if selected_sheet in ("Data treatment", "Pipeline Step by Step"):
+    if selected_sheet == "Data treatment":
+        st.divider()
+        render_fair_profile_manager("Data treatment")
+        st.divider()
+        render_fair_data_treatment_access()
+        return
+
+    if selected_sheet == "Pipeline Step by Step":
         st.divider()
         render_fair_profile_manager(selected_sheet)
         st.divider()
         st.subheader(selected_sheet)
         st.info(
-            "La feuille sera développée dans une prochaine étape. Les préférences propres à cette feuille sont déjà mémorisées dans le profil actif."
+            "Cette feuille sera développée dans une prochaine étape. Les préférences propres à cette feuille sont déjà mémorisées dans le profil actif."
             if fr else
             "This sheet will be implemented in a later phase. Sheet-specific preferences are already stored in the active profile."
         )
