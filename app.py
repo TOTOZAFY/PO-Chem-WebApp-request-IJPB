@@ -1937,6 +1937,30 @@ def render_fair_profile_manager(sheet):
                     profile_payload["profiles"].pop(clean_name, None)
                     st.error(("Impossible de créer le profil : " if fr else "Could not create profile: ") + str(exc))
 
+# Main navigation. Keep the internal page key explicit so the routing below
+# never references an undefined `page` variable.
+if st.query_params.get("fair_token"):
+    page = "fair_link"
+else:
+    _fr_navigation = st.session_state.get("language", "fr") == "fr"
+    _navigation_options = {
+        ("Demande d'analyse" if _fr_navigation else "Analysis request"): "form",
+        ("FAIR" if _fr_navigation else "FAIR"): "fair",
+        ("Administrateur" if _fr_navigation else "Administrator"): "admin",
+    }
+    _selected_navigation_label = st.sidebar.radio(
+        "Navigation",
+        options=list(_navigation_options.keys()),
+        index=list(_navigation_options.values()).index(
+            st.session_state.get("main_navigation_page", "form")
+            if st.session_state.get("main_navigation_page", "form") in _navigation_options.values()
+            else "form"
+        ),
+        key="main_navigation_selector",
+    )
+    page = _navigation_options[_selected_navigation_label]
+    st.session_state["main_navigation_page"] = page
+
 if st.query_params.get("fair_token"):
     try:
         fair_records = load_metadata()
