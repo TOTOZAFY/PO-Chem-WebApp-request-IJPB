@@ -392,8 +392,9 @@ def save_notification_settings(settings):
 # Persistent interface profiles. Only interface preferences are stored here;
 # request contents, FAIR values, credentials and form text are deliberately excluded.
 PROFILE_FIXED_PREFERENCES = {
-    "language", "navigation_page", "fair_selected_sheet",
-    "fair_analysis_role", "fair_sample_role", "analysis_type_select",
+    # Preferences specific to FAIR > Analysis only. Global navigation and
+    # application language are intentionally not profile-specific.
+    "fair_analysis_role", "analysis_type_select",
 }
 
 
@@ -417,27 +418,40 @@ def save_user_profiles(payload):
     response.raise_for_status()
 
 
-def get_profile_preferences():
+def _profile_sheet_keys(sheet):
+    """Return the session-state keys belonging to one FAIR sheet."""
+    if sheet == "Analysis":
+        return set(PROFILE_FIXED_PREFERENCES), "analysis_protocol_"
+    if sheet == "Data treatment":
+        return set(), "fair_data_treatment_pref_"
+    if sheet == "Pipeline Step by Step":
+        return set(), "fair_pipeline_step_pref_"
+    return set(), ""
+
+
+def get_profile_preferences(sheet="Analysis"):
+    fixed_keys, prefix = _profile_sheet_keys(sheet)
     preferences = {}
-    for key in PROFILE_FIXED_PREFERENCES:
+    for key in fixed_keys:
         if key in st.session_state:
             value = st.session_state[key]
             if isinstance(value, (str, int, float, bool)) or value is None:
                 preferences[key] = value
-    # Keep protocol preset selections, but never protocol descriptions or FAIR field values.
-    for key, value in st.session_state.items():
-        if key.startswith("analysis_protocol_") and not key.startswith("analysis_protocol_text_"):
-            if isinstance(value, str):
-                preferences[key] = value
+    if prefix:
+        for key, value in st.session_state.items():
+            if key.startswith(prefix) and not key.endswith("_text"):
+                if isinstance(value, (str, int, float, bool)) or value is None:
+                    preferences[key] = value
     return preferences
 
 
-def apply_profile_preferences(preferences):
+def apply_profile_preferences(preferences, sheet="Analysis"):
+    fixed_keys, prefix = _profile_sheet_keys(sheet)
     for key in list(st.session_state.keys()):
-        if key in PROFILE_FIXED_PREFERENCES or (key.startswith("analysis_protocol_") and not key.startswith("analysis_protocol_text_")):
+        if key in fixed_keys or (prefix and key.startswith(prefix) and not key.endswith("_text")):
             st.session_state.pop(key, None)
     for key, value in preferences.items():
-        if key in PROFILE_FIXED_PREFERENCES or (key.startswith("analysis_protocol_") and not key.startswith("analysis_protocol_text_")):
+        if key in fixed_keys or (prefix and key.startswith(prefix) and not key.endswith("_text")):
             st.session_state[key] = value
 
 
@@ -923,6 +937,8 @@ def render_fair_portal():
 
     if selected_sheet == "Analysis":
         st.divider()
+        render_fair_profile_manager("Analysis")
+        st.divider()
         st.subheader("Analysis")
         role = st.selectbox(
             "Qui souhaite compléter la feuille Analysis ?" if fr else "Who is completing the Analysis sheet?",
@@ -971,12 +987,15 @@ def render_fair_portal():
             st.info("Aucune demande disponible." if fr else "No requests available.")
         return
 
-    if selected_sheet != "Sample":
+    if selected_sheet in ("Data treatment", "Pipeline Step by Step"):
+        st.divider()
+        render_fair_profile_manager(selected_sheet)
+        st.divider()
         st.subheader(selected_sheet)
         st.info(
-            "Cette feuille sera développée dans une prochaine étape. Pour le moment, seule la feuille Sample et la feuille Analysis sont opérationnelles."
+            "La feuille sera développée dans une prochaine étape. Les préférences propres à cette feuille sont déjà mémorisées dans le profil actif."
             if fr else
-            "This sheet will be implemented in a later phase. For now, only Sample and Analysis are operational."
+            "This sheet will be implemented in a later phase. Sheet-specific preferences are already stored in the active profile."
         )
         return
 
@@ -1828,97 +1847,95 @@ def render_form():
 if "language" not in st.session_state:
     st.session_state.language = "fr"
 
-# Load the persistent profile list from Nextcloud before creating the page widgets.
+if "language" not in st.session_state:
+    st.session_state.language = "fr"
+
+# Profiles are loaded and displayed only inside FAIR > Analysis.
 profile_payload = {"profiles": {}}
 profile_storage_ok = False
-try:
-    profile_payload = load_user_profiles()
-    profile_storage_ok = True
-    if not profile_payload["profiles"]:
-        profile_payload["profiles"]["Chriso"] = {"preferences": {"language": "fr"}}
-        save_user_profiles(profile_payload)
-except Exception as profile_exc:
-    st.sidebar.warning("Profils indisponibles : " + str(profile_exc))
+profile_names = []
 
-profile_names = sorted(profile_payload.get("profiles", {}).keys(), key=str.casefold)
-if not profile_names:
-    profile_names = ["Session temporaire"]
-if "active_user_profile" not in st.session_state or st.session_state.active_user_profile not in profile_names:
-    st.session_state.active_user_profile = "Chriso" if "Chriso" in profile_names else profile_names[0]
+def render_fair_profile_manager(sheet):
+    """Show and activate a persistent profile within selected FAIR sheets only."""
+    global profile_payload, profile_storage_ok, profile_names
+    fr = st.session_state.get("language", "fr") == "fr"
+    try:
+        profile_payload = load_user_profiles()
+        profile_storage_ok = True
+        if not profile_payload["profiles"]:
+            profile_payload["profiles"]["Chriso"] = {"preferences_by_sheet": {}}
+            save_user_profiles(profile_payload)
+    except Exception as profile_exc:
+        profile_storage_ok = False
+        st.warning(("Profils indisponibles : " if fr else "Profiles unavailable: ") + str(profile_exc))
 
-# Restore preferences only when the selected profile changes.
-if st.session_state.get("_loaded_user_profile") != st.session_state.active_user_profile:
-    selected_profile_data = profile_payload.get("profiles", {}).get(st.session_state.active_user_profile, {})
-    apply_profile_preferences(selected_profile_data.get("preferences", {}))
-    st.session_state["_loaded_user_profile"] = st.session_state.active_user_profile
+    profile_names = sorted(profile_payload.get("profiles", {}).keys(), key=str.casefold)
+    if not profile_names:
+        profile_names = ["Session temporaire"]
+    if "active_user_profile" not in st.session_state or st.session_state.active_user_profile not in profile_names:
+        st.session_state.active_user_profile = "Chriso" if "Chriso" in profile_names else profile_names[0]
 
-with st.sidebar:
-    st.subheader("Profil utilisateur" if st.session_state.language == "fr" else "User profile")
+    profile_data = profile_payload.get("profiles", {}).get(st.session_state.active_user_profile, {})
+    # Migrate the former v1.7-v1.9 single-sheet structure without losing preferences.
+    prefs_by_sheet = profile_data.setdefault("preferences_by_sheet", {})
+    if "preferences" in profile_data and "Analysis" not in prefs_by_sheet:
+        prefs_by_sheet["Analysis"] = profile_data.pop("preferences")
+    selected_prefs = prefs_by_sheet.get(sheet, {})
+    loaded_marker = f"_loaded_user_profile_{sheet}"
+    if st.session_state.get(loaded_marker) != st.session_state.active_user_profile:
+        apply_profile_preferences(selected_prefs, sheet)
+        st.session_state[loaded_marker] = st.session_state.active_user_profile
+
+    st.subheader("Profil utilisateur" if fr else "User profile")
     chosen_profile = st.selectbox(
-        "Profil" if st.session_state.language == "fr" else "Profile",
+        "Profil actif" if fr else "Active profile",
         options=profile_names,
         index=profile_names.index(st.session_state.active_user_profile),
+        key=f"fair_{sheet.lower().replace(' ', '_')}_active_profile_select",
     )
     if chosen_profile != st.session_state.active_user_profile:
         st.session_state.active_user_profile = chosen_profile
+        st.session_state.pop(loaded_marker, None)
         st.rerun()
-    st.caption("Le profil mémorise uniquement les préférences de l'interface. Les réponses et métadonnées FAIR restent dans le classeur de chaque demande." if st.session_state.language == "fr" else "The profile stores interface preferences only. FAIR answers and metadata remain in each request workbook.")
-    with st.expander("Ajouter un autre profil" if st.session_state.language == "fr" else "Add another profile"):
+    st.caption(
+        f"Le profil mémorise uniquement les préférences de l'interface FAIR → {sheet}. Les réponses et métadonnées restent dans le classeur FAIR de chaque demande."
+        if fr else
+        f"The profile stores only FAIR → {sheet} interface preferences. Answers and metadata remain in each request's FAIR workbook."
+    )
+    with st.expander("Ajouter un autre profil" if fr else "Add another profile"):
         st.caption(
-            "Tu peux créer autant de profils que nécessaire. Chaque profil conserve ses propres préférences d'interface."
-            if st.session_state.language == "fr" else
-            "You can create as many profiles as needed. Each profile keeps its own interface preferences."
+            "Chaque profil conserve séparément ses préférences pour Analysis, Data Treatment et Pipeline Step by Step."
+            if fr else
+            "Each profile keeps separate preferences for Analysis, Data Treatment and Pipeline Step by Step."
         )
-        with st.form("create_user_profile_form", clear_on_submit=True):
+        with st.form(f"create_user_profile_form_{sheet.lower().replace(' ', '_')}", clear_on_submit=True):
             new_profile_name = st.text_input(
-                "Nom du nouveau profil" if st.session_state.language == "fr" else "New profile name",
-                placeholder="Ex. Marie, Jean, Chriso…" if st.session_state.language == "fr" else "e.g. Marie, Jean, Chris…",
+                "Nom du nouveau profil" if fr else "New profile name",
+                placeholder="Ex. Marie, Jean, Chriso…" if fr else "e.g. Marie, Jean, Chris…",
             )
             create_profile_submitted = st.form_submit_button(
-                "Ajouter le profil" if st.session_state.language == "fr" else "Add profile",
-                use_container_width=True,
+                "Ajouter le profil" if fr else "Add profile", use_container_width=True
             )
         if create_profile_submitted:
             clean_name = new_profile_name.strip()
             if not clean_name:
-                st.warning("Saisis un nom de profil." if st.session_state.language == "fr" else "Enter a profile name.")
+                st.warning("Saisis un nom de profil." if fr else "Enter a profile name.")
             elif any(existing.casefold() == clean_name.casefold() for existing in profile_names):
-                st.warning("Ce profil existe déjà. Choisis un autre nom." if st.session_state.language == "fr" else "This profile already exists. Choose another name.")
+                st.warning("Ce profil existe déjà. Choisis un autre nom." if fr else "This profile already exists. Choose another name.")
             elif not profile_storage_ok:
-                st.error("Le stockage Nextcloud des profils n'est pas disponible." if st.session_state.language == "fr" else "Nextcloud profile storage is unavailable.")
+                st.error("Le stockage Nextcloud des profils n'est pas disponible." if fr else "Nextcloud profile storage is unavailable.")
             else:
-                # A new profile starts with the current interface preferences,
-                # then evolves independently. FAIR answers and protocol text are excluded.
-                profile_payload["profiles"][clean_name] = {"preferences": get_profile_preferences()}
+                profile_payload["profiles"][clean_name] = {
+                    "preferences_by_sheet": {sheet: get_profile_preferences(sheet)}
+                }
                 try:
                     save_user_profiles(profile_payload)
                     st.session_state.active_user_profile = clean_name
-                    st.session_state.pop("_loaded_user_profile", None)
+                    st.session_state.pop(loaded_marker, None)
                     st.rerun()
                 except Exception as exc:
                     profile_payload["profiles"].pop(clean_name, None)
-                    st.error(("Impossible de créer le profil : " if st.session_state.language == "fr" else "Could not create profile: ") + str(exc))
-
-    st.selectbox(
-        TRANSLATIONS[st.session_state.language]["language"],
-        options=["fr", "en"],
-        format_func=lambda x: "Français" if x == "fr" else "English",
-        key="language",
-    )
-    page_labels = {
-        ("Demande" if st.session_state.language == "fr" else "Request"): "request",
-        ("FAIR" if st.session_state.language == "fr" else "FAIR"): "fair",
-        ("Administrateur" if st.session_state.language == "fr" else "Administrator"): "admin",
-    }
-    reverse_page_labels = {value: label for label, value in page_labels.items()}
-    saved_page = st.session_state.get("navigation_page", "request")
-    selected_page = st.radio(
-        "Navigation", list(page_labels),
-        index=list(page_labels).index(reverse_page_labels.get(saved_page, list(page_labels)[0])),
-        label_visibility="collapsed",
-    )
-    page = page_labels[selected_page]
-    st.session_state["navigation_page"] = page
+                    st.error(("Impossible de créer le profil : " if fr else "Could not create profile: ") + str(exc))
 
 if st.query_params.get("fair_token"):
     try:
@@ -1941,11 +1958,18 @@ elif page == "fair":
 else:
     render_form()
 
-# Persist interface preferences after each Streamlit interaction/rerun.
-# FAIR workbook contents and request form answers are never copied into profiles.
-if profile_storage_ok and st.session_state.get("active_user_profile") in profile_payload.get("profiles", {}):
+# Persist preferences only inside the three selected FAIR sheets with profile support.
+# Sample and all other application sections remain outside the profile system.
+_selected_profile_sheet = st.session_state.get("fair_selected_sheet")
+if (page == "fair" and _selected_profile_sheet in ("Analysis", "Data treatment", "Pipeline Step by Step")
+        and profile_storage_ok
+        and st.session_state.get("active_user_profile") in profile_payload.get("profiles", {})):
     try:
-        profile_payload["profiles"][st.session_state.active_user_profile]["preferences"] = get_profile_preferences()
+        _profile = profile_payload["profiles"][st.session_state.active_user_profile]
+        _prefs_by_sheet = _profile.setdefault("preferences_by_sheet", {})
+        if "preferences" in _profile and "Analysis" not in _prefs_by_sheet:
+            _prefs_by_sheet["Analysis"] = _profile.pop("preferences")
+        _prefs_by_sheet[_selected_profile_sheet] = get_profile_preferences(_selected_profile_sheet)
         save_user_profiles(profile_payload)
     except Exception as profile_save_exc:
-        st.sidebar.warning(("Préférences non enregistrées dans Nextcloud : " if st.session_state.language == "fr" else "Preferences were not saved to Nextcloud: ") + str(profile_save_exc))
+        st.warning(("Préférences non enregistrées dans Nextcloud : " if st.session_state.language == "fr" else "Preferences were not saved to Nextcloud: ") + str(profile_save_exc))
