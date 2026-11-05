@@ -515,7 +515,8 @@ def request_display_label(record, include_date=True):
         filename_part(record.get("project_name"), "PROJET"),
         filename_part(record.get("group"), "LABO"),
     ]
-    label = " — ".join(parts)
+    request_id = str(record.get("id", "")).strip()
+    label = " — ".join(([request_id] if request_id else []) + parts)
     if include_date:
         label += f" — {str(record.get('submitted_at', ''))[:10]}"
     return label
@@ -588,14 +589,13 @@ def build_document(form_data):
     guidance_cell = table.cell(7, 0)
     add_to_existing_paragraph(guidance_cell.paragraphs[0], f"{t('answer_prefix')} {form_data.get('guidance', 'NO')}", bold=True)
 
-    # Filename format includes the unique request ID.
+    # New naming convention: REQ-<unique identifier>-<date>-<time>-<requester>-<project>-<lab>.
     request_id = form_data.get("request_id", "REQ-SANS-ID")
-    timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
     manager_name = filename_part(form_data.get("project_manager"), "DEMANDEUR")
     project_name = filename_part(form_data.get("project_name"), "PROJET")
     lab_name = filename_part(form_data.get("group"), "LABO")
-    # Keep the unique request ID and timestamp, and expose requester-project-lab.
-    reference = f"E-GES-01-{request_id}-{timestamp}-{manager_name}-{project_name}-{lab_name}"
+    # request_id already contains the unique identifier and submission date/time.
+    reference = f"{request_id}-{manager_name}-{project_name}-{lab_name}"
     for row in doc.tables[0].rows:
         for cell in row.cells:
             for paragraph in cell.paragraphs:
@@ -2157,9 +2157,9 @@ def render_form():
                     st.warning(t("required"))
             else:
                 if not data.get("request_id"):
-                    data["request_id"] = (
-                        f"REQ-{datetime.now().astimezone().year}-{uuid.uuid4().hex[:8].upper()}"
-                    )
+                    request_timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
+                    request_identifier = uuid.uuid4().hex[:8].upper()
+                    data["request_id"] = f"REQ-{request_identifier}-{request_timestamp}"
                 try:
                     document_bytes, filename = build_document(data)
                     st.download_button(
