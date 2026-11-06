@@ -625,7 +625,7 @@ def build_document(form_data):
     # "Nature et nombre des échantillons", before the sample description.
     samples_cell = table.cell(4, 0)
     sample_count = form_data.get("sample_count", "")
-    if sample_count not in ("", None):
+    if not form_data.get("analysis_items") and sample_count not in ("", None):
         count_paragraph = samples_cell.add_paragraph()
         count_paragraph.paragraph_format.space_after = Pt(4)
         count_run = count_paragraph.add_run(
@@ -634,37 +634,29 @@ def build_document(form_data):
         )
         count_run.bold = True
         count_run.font.size = Pt(9)
-    analysis_type = form_data.get("analysis_type", "").strip()
-    if analysis_type:
-        type_paragraph = samples_cell.add_paragraph()
-        type_paragraph.paragraph_format.space_after = Pt(4)
-        type_run = type_paragraph.add_run(
-            ("Type d’analyse : " if st.session_state.get("language", "fr") == "fr" else "Analysis type: ")
-            + analysis_type
-        )
-        type_run.bold = True
-        type_run.font.size = Pt(9)
-
-    analysis_mode = form_data.get("analysis_mode", "").strip()
-    if analysis_mode:
-        mode_paragraph = samples_cell.add_paragraph()
-        mode_paragraph.paragraph_format.space_after = Pt(4)
-        mode_run = mode_paragraph.add_run(
-            ("Mode d’ionisation / d’injection : " if st.session_state.get("language", "fr") == "fr" else "Ionization / injection mode: ")
-            + analysis_mode
-        )
-        mode_run.bold = True
-        mode_run.font.size = Pt(9)
-
-    analysis_details = form_data.get("analysis_details", "").strip()
-    if analysis_details:
-        details_paragraph = samples_cell.add_paragraph()
-        details_paragraph.paragraph_format.space_after = Pt(4)
-        details_run = details_paragraph.add_run(
-            ("Détails du développement spécifique : " if st.session_state.get("language", "fr") == "fr" else "Specific development details: ")
-            + analysis_details
-        )
-        details_run.font.size = Pt(9)
+    analysis_items = form_data.get("analysis_items") or [{
+        "analysis_type": form_data.get("analysis_type", ""),
+        "analysis_mode": form_data.get("analysis_mode", ""),
+        "sample_count": form_data.get("sample_count", 1),
+        "analysis_details": form_data.get("analysis_details", ""),
+    }]
+    for number, analysis in enumerate(analysis_items, 1):
+        analysis_type = str(analysis.get("analysis_type", "")).strip()
+        analysis_mode = str(analysis.get("analysis_mode", "")).strip()
+        analysis_details = str(analysis.get("analysis_details", "")).strip()
+        sample_count = analysis.get("sample_count", 1)
+        paragraph = samples_cell.add_paragraph()
+        paragraph.paragraph_format.space_after = Pt(4)
+        label = (f"Analyse {number} — " if st.session_state.get("language", "fr") == "fr" else f"Analysis {number} — ")
+        run = paragraph.add_run(label + analysis_type + f" | {sample_count} " + ("échantillon(s)" if st.session_state.get("language", "fr") == "fr" else "sample(s)"))
+        run.bold = True
+        run.font.size = Pt(9)
+        if analysis_mode:
+            mode_p = samples_cell.add_paragraph(("Mode : " if st.session_state.get("language", "fr") == "fr" else "Mode: ") + analysis_mode)
+            mode_p.paragraph_format.left_indent = Inches(0.2)
+        if analysis_details:
+            detail_p = samples_cell.add_paragraph(("Détails : " if st.session_state.get("language", "fr") == "fr" else "Details: ") + analysis_details)
+            detail_p.paragraph_format.left_indent = Inches(0.2)
 
     samples = form_data.get("samples", "").strip()
     if samples:
@@ -747,7 +739,7 @@ def create_fair_workbook(record):
     ws["B1"] = record.get("project_name", "")
     ws["B2"] = (record.get("submitted_at", "") or record.get("request_date", ""))[:10]
     ws["B3"] = record.get("id", "")
-    ws["B4"] = record.get("analysis_type", "")
+    ws["B4"] = " ; ".join(x.get("analysis_type", "") for x in record.get("analysis_items", [])) or record.get("analysis_type", "")
     remove_formatting_from_empty_cells(wb)
     output = BytesIO()
     wb.save(output)
@@ -2007,38 +1999,32 @@ def render_admin():
         year = decision_date[:4]
         if not year.isdigit():
             continue
-        analysis_type_key = normalize_analysis_type_name(str(item.get("analysis_type", "")))
-        price_record = catalog_prices.get(analysis_type_key, {})
+        analysis_items = item.get("analysis_items") or [{
+            "analysis_type": item.get("analysis_type", ""),
+            "analysis_mode": item.get("analysis_mode", ""),
+            "sample_count": item.get("sample_count", 1),
+        }]
         lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
-        # Also accept French labels if they were persisted by an earlier form.
         lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(lab_type, lab_type)
-        price_key = {
-            "Privée": "private_price",
-            "Public": "public_price",
-            "Public (IJPB)": "inrae_public_price",
-        }.get(lab_type)
-        unit_price = price_record.get(price_key) if price_key else None
-        try:
-            unit_price = float(str(unit_price).replace(",", ".")) if unit_price not in (None, "") else None
-            sample_count = max(1, int(item.get("sample_count", 1) or 1))
-        except (TypeError, ValueError):
-            unit_price = None
-            sample_count = 1
-        analysis_mode_value = str(item.get("analysis_mode", "") or "")
-        multiplier = 2 if analysis_mode_value in ("Split/Splitless", "ESI+/-") else 1
-        if unit_price is None:
-            missing_price_count += 1
-            continue
+        price_key = {"Privée": "private_price", "Public": "public_price", "Public (IJPB)": "inrae_public_price"}.get(lab_type)
         revenue_category = lab_type
         if lab_type == "Public (IJPB)":
             funding_value = str(item.get("funding", "NO") or "NO").strip().upper()
-            is_funded = funding_value in ("YES", "OUI", "TRUE", "1")
-            revenue_category = (
-                "Public (IJPB) - funded" if is_funded
-                else "Public (IJPB) - not funded"
-            )
+            revenue_category = "Public (IJPB) - funded" if funding_value in ("YES", "OUI", "TRUE", "1") else "Public (IJPB) - not funded"
         year_totals = annual_revenue.setdefault(year, {category: 0.0 for category in revenue_categories})
-        year_totals[revenue_category] += unit_price * sample_count * multiplier
+        for analysis in analysis_items:
+            price_record = catalog_prices.get(normalize_analysis_type_name(str(analysis.get("analysis_type", ""))), {})
+            raw_price = price_record.get(price_key) if price_key else None
+            try:
+                unit_price = float(str(raw_price).replace(",", ".")) if raw_price not in (None, "") else None
+                sample_count = max(1, int(analysis.get("sample_count", 1) or 1))
+            except (TypeError, ValueError):
+                unit_price, sample_count = None, 1
+            multiplier = 2 if str(analysis.get("analysis_mode", "")) in ("Split/Splitless", "ESI+/-") else 1
+            if unit_price is None:
+                missing_price_count += 1
+                continue
+            year_totals[revenue_category] += unit_price * sample_count * multiplier
         annual_request_counts[year] = annual_request_counts.get(year, 0) + 1
 
     if annual_revenue:
@@ -2169,12 +2155,15 @@ def render_admin():
             st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
             stored_type = record.get("analysis_type", "")
             shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
-            st.write(f"**{t('analysis_type')} :** {shown_type or '—'}")
-            if record.get("analysis_mode"):
-                st.write(f"**{t('analysis_mode')} :** {record.get('analysis_mode')}")
-            if record.get("analysis_details"):
-                details_label = "Détails du développement spécifique" if st.session_state.language == "fr" else "Specific development details"
-                st.write(f"**{details_label} :** {record.get('analysis_details')}")
+            admin_analysis_items = record.get("analysis_items") or [{"analysis_type": stored_type, "analysis_mode": record.get("analysis_mode", ""), "sample_count": record.get("sample_count", 1), "analysis_details": record.get("analysis_details", "")}]
+            for analysis_number, analysis in enumerate(admin_analysis_items, 1):
+                raw_type = analysis.get("analysis_type", "")
+                display_type = raw_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(raw_type, ANALYSIS_TYPES_EN.get(raw_type, raw_type))
+                st.write(f"**Analyse {analysis_number if st.session_state.language == 'fr' else 'Analysis ' + str(analysis_number)} :** {display_type} — {analysis.get('sample_count', 1)} échantillon(s)")
+                if analysis.get("analysis_mode"):
+                    st.caption(f"{t('analysis_mode')} : {analysis.get('analysis_mode')}")
+                if analysis.get("analysis_details"):
+                    st.caption(f"{t('specific_development_details')} : {analysis.get('analysis_details')}")
             st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
             request_status = record.get("status", "pending")
             request_status_labels = {
@@ -2354,42 +2343,42 @@ def render_admin():
                         cc_addresses = [record.get("admin_email", ""), record.get("platform_staff_email", "")]
                         if new_status == "accepted":
                             cc_addresses.append(recipients_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"))
-                            sample_count = max(1, int(record.get("sample_count", 1) or 1))
-                            analysis_type = str(record.get("analysis_type", "") or "")
-                            analysis_mode = str(record.get("analysis_mode", "") or "")
                             visibility = str(record.get("visibility", "Public (IJPB)") or "Public (IJPB)")
-                            catalog_entry = next((
-                                item for item in recipients_settings.get("analysis_catalog", [])
-                                if isinstance(item, dict)
-                                and normalize_analysis_type_name(str(item.get("type", ""))) == normalize_analysis_type_name(analysis_type)
-                            ), {})
-                            price_key = {
-                                "Privée": "private_price",
-                                "Public": "public_price",
-                                "Public (IJPB)": "inrae_public_price",
-                            }.get(visibility)
-                            raw_unit_price = catalog_entry.get(price_key) if price_key else None
-                            try:
-                                unit_price = float(str(raw_unit_price).strip().replace(" ", "").replace(",", ".").replace("€", "")) if raw_unit_price not in (None, "") else None
-                            except (TypeError, ValueError):
-                                unit_price = None
-                            multiplier = 2 if analysis_mode in ("Split/Splitless", "ESI+/-") else 1  # Split, Splitless, ESI+ and ESI- remain at x1
-                            total_price = unit_price * sample_count * multiplier if unit_price is not None else None
-                            # Display the calculated amount as indicative for every laboratory type.
-                            # The signed quotation remains the only binding price document.
-                            if total_price is not None:
-                                price_text_fr = (
-                                    f"{total_price:.2f} € (tarif unitaire : {unit_price:.2f} € × "
-                                    f"{sample_count} échantillon(s) × {multiplier})"
-                                )
-                                price_text_en = (
-                                    f"€{total_price:.2f} (unit price: €{unit_price:.2f} × "
-                                    f"{sample_count} sample(s) × {multiplier})"
-                                )
-                            else:
-                                price_text_fr = "Indisponible : aucun tarif n'est renseigné dans le catalogue."
-                                price_text_en = "Unavailable: no price is specified in the catalog."
-
+                            analysis_items = record.get("analysis_items") or [{
+                                "analysis_type": record.get("analysis_type", ""),
+                                "analysis_mode": record.get("analysis_mode", ""),
+                                "sample_count": record.get("sample_count", 1),
+                            }]
+                            catalog = {
+                                normalize_analysis_type_name(str(x.get("type", ""))): x
+                                for x in recipients_settings.get("analysis_catalog", []) if isinstance(x, dict)
+                            }
+                            price_key = {"Privée": "private_price", "Public": "public_price", "Public (IJPB)": "inrae_public_price"}.get(visibility)
+                            total_price = 0.0
+                            price_complete = True
+                            details_fr, details_en = [], []
+                            for analysis in analysis_items:
+                                atype = str(analysis.get("analysis_type", ""))
+                                mode = str(analysis.get("analysis_mode", "") or "")
+                                count = max(1, int(analysis.get("sample_count", 1) or 1))
+                                multiplier = 2 if mode in ("Split/Splitless", "ESI+/-") else 1
+                                entry = catalog.get(normalize_analysis_type_name(atype), {})
+                                raw = entry.get(price_key) if price_key else None
+                                try:
+                                    unit = float(str(raw).strip().replace(" ", "").replace(",", ".").replace("€", "")) if raw not in (None, "") else None
+                                except (TypeError, ValueError):
+                                    unit = None
+                                if unit is None:
+                                    price_complete = False
+                                else:
+                                    total_price += unit * count * multiplier
+                                details_fr.append(f"- {atype} | {count} échantillon(s) | {mode or 'Mode non précisé'}")
+                                details_en.append(f"- {atype} | {count} sample(s) | {mode or 'Mode not specified'}")
+                            sample_count = sum(max(1, int(x.get("sample_count", 1) or 1)) for x in analysis_items)
+                            analysis_details_fr = "\n".join(details_fr)
+                            analysis_details_en = "\n".join(details_en)
+                            price_text_fr = f"{total_price:.2f} €" if price_complete else "Indisponible : au moins un tarif manque dans le catalogue."
+                            price_text_en = f"€{total_price:.2f}" if price_complete else "Unavailable: at least one catalog price is missing."
                             if visibility in ("Public", "Privée"):
                                 quote_followup_fr = "Un devis détaillé vous sera envoyé prochainement."
                                 quote_followup_en = "A detailed quotation will be sent to you shortly."
@@ -2400,28 +2389,13 @@ def render_admin():
                             disclaimer_fr = "Le prix indiqué est donné à titre indicatif. Seul le devis signé fait foi."
                             disclaimer_en = "The displayed price is indicative only. Only the signed quotation is authoritative."
 
-                            analysis_type_upper = analysis_type.strip().upper()
-                            if analysis_type_upper.endswith("GC-MS"):
-                                mode_label_fr, mode_label_en = "Mode d'injection", "Injection mode"
-                                mode_value_fr, mode_value_en = analysis_mode or "Non renseigné", analysis_mode or "Not specified"
-                            elif analysis_type_upper.endswith("LC-HRMS"):
-                                mode_label_fr, mode_label_en = "Mode d'ionisation", "Ionization mode"
-                                mode_value_fr, mode_value_en = analysis_mode or "Non renseigné", analysis_mode or "Not specified"
-                            elif analysis_type_upper.endswith("LC-MS/MS"):
-                                mode_label_fr, mode_label_en = "Mode analytique", "Analytical mode"
-                                mode_value_fr, mode_value_en = "méthode utilisée", "method used"
-                            else:
-                                mode_label_fr, mode_label_en = "Mode analytique", "Analytical mode"
-                                mode_value_fr, mode_value_en = analysis_mode or "Non applicable", analysis_mode or "Not applicable"
-
                             if st.session_state.language == "fr":
                                 body = (
                                     f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
                                     f"Votre demande d'analyse a été acceptée.\n\n"
                                     f"Référence de la demande : {record.get('id', '')}\n"
                                     f"Nombre d'échantillons : {sample_count}\n"
-                                    f"Type d'analyse : {analysis_type}\n"
-                                    f"{mode_label_fr} : {mode_value_fr}\n"
+                                    f"Analyses demandées :\n{analysis_details_fr}\n"
                                     f"Type de laboratoire : {visibility}\n"
                                     f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n"
                                     f"{quote_followup_fr}\n"
@@ -2435,8 +2409,7 @@ def render_admin():
                                     "Your analysis request has been accepted.\n\n"
                                     f"Request reference: {record.get('id', '')}\n"
                                     f"Number of samples: {sample_count}\n"
-                                    f"Analysis type: {analysis_type}\n"
-                                    f"{mode_label_en}: {mode_value_en}\n"
+                                    f"Requested analyses:\n{analysis_details_en}\n"
                                     f"Laboratory type: {visibility}\n"
                                     f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n"
                                     f"{quote_followup_en}\n"
@@ -2644,69 +2617,51 @@ def render_form():
             st.caption(
                 t("platform_contact_caption")
             )
-            # Keep the analysis-type list intact and display the acquisition mode
-            # in a separate field only when the selected method requires it.
-            current_analysis_type = data.get("analysis_type", available_analysis_types[0])
-            analysis_type_labels = []
-            analysis_type_values = []
-            for canonical_type in available_analysis_types:
-                translated_type = (
-                    canonical_type if st.session_state.language == "fr"
-                    else available_analysis_type_translations.get(
-                        canonical_type, ANALYSIS_TYPES_EN.get(canonical_type, canonical_type)
-                    )
-                )
-                analysis_type_labels.append(translated_type)
-                analysis_type_values.append(canonical_type)
-
-            current_type_index = (
-                analysis_type_values.index(current_analysis_type)
-                if current_analysis_type in analysis_type_values else 0
-            )
-            selected_analysis_label = st.selectbox(
-                t("analysis_type"),
-                options=analysis_type_labels,
-                index=current_type_index,
-                key="analysis_type_select",
-            )
-            selected_type_index = analysis_type_labels.index(selected_analysis_label)
-            data["analysis_type"] = analysis_type_values[selected_type_index]
-
-            if data["analysis_type"].endswith("LC-HRMS"):
-                mode_choices = ["ESI+", "ESI-", "ESI+/-"]
-                mode_label = t("analysis_mode_lchrms")
-            elif data["analysis_type"].endswith("GC-MS"):
-                mode_choices = ["Splitless", "Split", "Split/Splitless"]
-                mode_label = t("analysis_mode_gc_ms")
-            else:
-                mode_choices = []
-                mode_label = ""
-
-            if mode_choices:
-                previous_mode = data.get("analysis_mode", "")
-                if previous_mode not in mode_choices:
-                    previous_mode = mode_choices[0]
-                mode_index = mode_choices.index(previous_mode)
-                data["analysis_mode"] = st.selectbox(
-                    mode_label,
-                    options=mode_choices,
-                    index=mode_index,
-                    key="analysis_mode_select",
-                )
-            else:
-                data["analysis_mode"] = ""
-
-            if data["analysis_type"].startswith("Développement de méthodes spécifiques") or data["analysis_type"].startswith("Développements spécifiques"):
-                st.text_area(
-                    t("specific_development_details"),
-                    value=data.get("analysis_details", ""),
-                    height=130,
-                    help=t("specific_development_help"),
-                    key="analysis_details_input",
-                )
-                data["analysis_details"] = st.session_state.get("analysis_details_input", "")
-            else:
-                data["analysis_details"] = ""
+            # One request can contain several analyses, each with its own sample count and mode.
+            analysis_items = data.setdefault("analysis_items", [])
+            if not analysis_items:
+                analysis_items.append({
+                    "analysis_type": data.get("analysis_type", available_analysis_types[0]),
+                    "analysis_mode": data.get("analysis_mode", ""),
+                    "sample_count": int(data.get("sample_count", 1) or 1),
+                    "analysis_details": data.get("analysis_details", ""),
+                })
+            st.markdown(f"**{t('analysis_type')}**")
+            for analysis_index, analysis_item in enumerate(analysis_items):
+                with st.container(border=True):
+                    st.markdown((f"**Analyse {analysis_index + 1}**" if st.session_state.language == "fr" else f"**Analysis {analysis_index + 1}**"))
+                    labels, values = [], []
+                    for canonical_type in available_analysis_types:
+                        translated = canonical_type if st.session_state.language == "fr" else available_analysis_type_translations.get(canonical_type, ANALYSIS_TYPES_EN.get(canonical_type, canonical_type))
+                        labels.append(translated); values.append(canonical_type)
+                    current = analysis_item.get("analysis_type")
+                    idx = values.index(current) if current in values else 0
+                    selected_label = st.selectbox(t("analysis_type"), labels, index=idx, key=f"analysis_type_{analysis_index}")
+                    analysis_item["analysis_type"] = values[labels.index(selected_label)]
+                    atype = analysis_item["analysis_type"]
+                    modes = ["ESI+", "ESI-", "ESI+/-"] if atype.endswith("LC-HRMS") else (["Splitless", "Split", "Split/Splitless"] if atype.endswith("GC-MS") else [])
+                    if modes:
+                        previous = analysis_item.get("analysis_mode")
+                        if previous not in modes: previous = modes[0]
+                        mode_label = t("analysis_mode_lchrms") if atype.endswith("LC-HRMS") else t("analysis_mode_gc_ms")
+                        analysis_item["analysis_mode"] = st.selectbox(mode_label, modes, index=modes.index(previous), key=f"analysis_mode_{analysis_index}")
+                    else:
+                        analysis_item["analysis_mode"] = ""
+                    analysis_item["sample_count"] = st.number_input(t("sample_count"), min_value=1, max_value=1000000, value=max(1, int(analysis_item.get("sample_count", 1) or 1)), step=1, key=f"analysis_samples_{analysis_index}")
+                    if atype.startswith(("Développement de méthodes spécifiques", "Développements spécifiques")):
+                        analysis_item["analysis_details"] = st.text_area(t("specific_development_details"), value=analysis_item.get("analysis_details", ""), height=100, key=f"analysis_details_{analysis_index}")
+                    else:
+                        analysis_item["analysis_details"] = ""
+                    if len(analysis_items) > 1 and st.button(("Supprimer cette analyse" if st.session_state.language == "fr" else "Remove this analysis"), key=f"remove_analysis_{analysis_index}"):
+                        analysis_items.pop(analysis_index); st.rerun()
+            if st.button(("＋ Ajouter un autre type d’analyse" if st.session_state.language == "fr" else "＋ Add another analysis type"), key="add_analysis_item"):
+                analysis_items.append({"analysis_type": available_analysis_types[0], "analysis_mode": "", "sample_count": 1, "analysis_details": ""})
+                st.rerun()
+            data["analysis_items"] = analysis_items
+            data["analysis_type"] = analysis_items[0].get("analysis_type", "")
+            data["analysis_mode"] = analysis_items[0].get("analysis_mode", "")
+            data["analysis_details"] = analysis_items[0].get("analysis_details", "")
+            data["sample_count"] = sum(int(x.get("sample_count", 1) or 1) for x in analysis_items)
             text_field("platform_staff_email", t("platform_staff_email"))
             st.caption(t("recommended"))
         elif step == 1:
@@ -2716,11 +2671,7 @@ def render_form():
         elif step == 2:
             st.subheader(t("samples_title"))
             st.caption(t("samples_help"))
-            data["sample_count"] = st.number_input(
-                t("sample_count"), min_value=1, max_value=1000000,
-                value=int(data.get("sample_count", 1) or 1), step=1, format="%d",
-                key="sample_count_input",
-            )
+            st.caption("Le nombre d’échantillons est renseigné séparément pour chaque analyse dans la rubrique Plateforme." if st.session_state.language == "fr" else "The sample count is entered separately for each analysis in the Platform section.")
             text_area("samples", t("samples_field"), 220)
         elif step == 3:
             st.subheader(t("results_title"))
@@ -2744,9 +2695,7 @@ def render_form():
                 (t("group"), data.get("group", "")),
                 (t("date"), data.get("date", "")),
                 (t("manager_email"), data.get("manager_email", "")),
-                (t("analysis_type"), data.get("analysis_type", "")),
-                (t("analysis_mode"), data.get("analysis_mode", "")),
-                (t("specific_development_details"), data.get("analysis_details", "") if (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques")) else ""),
+                (t("analysis_type"), " ; ".join(f"{x.get('analysis_type', '')} — {x.get('sample_count', 1)}" for x in data.get("analysis_items", []))),
                 (t("project_name"), data.get("project_name", "")),
                 (t("funding"), data.get("funding", "NO")),
                 (t("guidance"), data.get("guidance", "NO")),
@@ -2788,12 +2737,13 @@ def render_form():
                 data.get("project_name", "").strip(),
                 data.get("analysis_type", "").strip(),
             ]
+            analyses_valid = bool(data.get("analysis_items")) and all(str(x.get("analysis_type", "")).strip() and int(x.get("sample_count", 0) or 0) > 0 and (not str(x.get("analysis_type", "")).startswith(("Développement de méthodes spécifiques", "Développements spécifiques")) or str(x.get("analysis_details", "")).strip()) for x in data.get("analysis_items", []))
             email_is_valid = bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", data.get("manager_email", "").strip()))
             specific_details_valid = (
                 not (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques"))
                 or bool(data.get("analysis_details", "").strip())
             )
-            form_is_valid = all(required_values) and email_is_valid and specific_details_valid
+            form_is_valid = all(required_values) and email_is_valid and specific_details_valid and analyses_valid
             if not form_is_valid:
                 if (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques")) and not data.get("analysis_details", "").strip():
                     st.warning(t("specific_development_required"))
@@ -2840,6 +2790,7 @@ def render_form():
                                 "analysis_mode": data.get("analysis_mode", ""),
                                 "analysis_details": data.get("analysis_details", ""),
                                 "sample_count": int(data.get("sample_count", 1) or 1),
+                                "analysis_items": [{**x, "sample_count": int(x.get("sample_count", 1) or 1)} for x in data.get("analysis_items", [])],
                                 "group": data.get("group", ""),
                                 "request_date": data.get("date", ""),
                                 "submitted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -2879,7 +2830,7 @@ def render_form():
                                         project=record["project_name"],
                                         manager=record.get("project_manager_first_name") or record["project_manager"],
                                         group=record["group"],
-                                        analysis_type=record.get("analysis_type", ""),
+                                        analysis_type=" ; ".join(x.get("analysis_type", "") for x in record.get("analysis_items", [])) or record.get("analysis_type", ""),
                                         analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
                                         path=remote_file,
                                     ),
