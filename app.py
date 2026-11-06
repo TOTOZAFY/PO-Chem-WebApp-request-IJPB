@@ -68,7 +68,8 @@ TRANSLATIONS = {
     "fr": {
         "language": "Langue / Language", "form": "Formulaire de demande",
         "admin": "Espace administrateur", "intro": "Complétez les rubriques ci-dessous. "
-        "À la dernière étape, votre demande sera enregistrée dans Nextcloud et l'administrateur sera notifié.",
+        "À la dernière étape, votre demande sera enregistrée dans Nextcloud et l'administrateur sera notifié. "
+        "La feuille de demande pourra également être téléchargée si nécessaire après la soumission.",
         "steps": ["Contacts", "Description du projet", "Échantillons", "Résultats & bibliographie",
                   "Informations complémentaires", "Vérification & soumission"],
         "general": "1. Informations générales", "requester_section": "Demandeur", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Responsable du projet *", "manager_last_name": "Nom *", "manager_first_name": "Prénom *",
@@ -187,7 +188,8 @@ TRANSLATIONS = {
     "en": {
         "language": "Language / Langue", "form": "Request form",
         "admin": "Administrator area", "intro": "Complete the sections below. "
-        "At the final step, your request will be saved to Nextcloud and the administrator will be notified.",
+        "At the final step, your request will be saved to Nextcloud and the administrator will be notified. "
+        "The request form can also be downloaded after submission if needed.",
         "steps": ["Contacts", "Project description", "Samples", "Preliminary results & bibliography",
                   "Additional information", "Review & submission"],
         "general": "1. General information", "requester_section": "Requester", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Project manager *", "manager_last_name": "Last name *", "manager_first_name": "First name *",
@@ -2161,15 +2163,94 @@ def render_admin():
                     st.info(t("pending_no_notification"))
                 elif email:
                     try:
-                        send_email(
-                            email, t("mail_user_subject"),
-                            t("mail_user_body").format(
+                        # On acceptance, enrich the requester notification with the
+                        # request details and the applicable catalogue price.
+                        recipients_settings = load_notification_settings()
+                        cc_addresses = [record.get("admin_email", ""), record.get("platform_staff_email", "")]
+                        if new_status == "accepted":
+                            cc_addresses.append(recipients_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"))
+                            sample_count = max(1, int(record.get("sample_count", 1) or 1))
+                            analysis_type = str(record.get("analysis_type", "") or "")
+                            analysis_mode = str(record.get("analysis_mode", "") or "")
+                            visibility = str(record.get("visibility", "Public (IJPB)") or "Public (IJPB)")
+                            catalog_entry = next((
+                                item for item in recipients_settings.get("analysis_catalog", [])
+                                if isinstance(item, dict)
+                                and normalize_analysis_type_name(str(item.get("type", ""))) == normalize_analysis_type_name(analysis_type)
+                            ), {})
+                            price_key = {
+                                "Privée": "private_price",
+                                "Public": "public_price",
+                                "Public (IJPB)": "inrae_public_price",
+                            }.get(visibility)
+                            raw_unit_price = catalog_entry.get(price_key) if price_key else None
+                            try:
+                                unit_price = float(str(raw_unit_price).strip().replace(" ", "").replace(",", ".").replace("€", "")) if raw_unit_price not in (None, "") else None
+                            except (TypeError, ValueError):
+                                unit_price = None
+                            multiplier = 2 if analysis_mode in ("Split/Splitless", "ESI+/-") else 1  # Split, Splitless, ESI+ and ESI- remain at x1
+                            total_price = unit_price * sample_count * multiplier if unit_price is not None else None
+                            # Display the calculated amount as indicative for every laboratory type.
+                            # The signed quotation remains the only binding price document.
+                            if total_price is not None:
+                                price_text_fr = (
+                                    f"{total_price:.2f} € (tarif unitaire : {unit_price:.2f} € × "
+                                    f"{sample_count} échantillon(s) × {multiplier})"
+                                )
+                                price_text_en = (
+                                    f"€{total_price:.2f} (unit price: €{unit_price:.2f} × "
+                                    f"{sample_count} sample(s) × {multiplier})"
+                                )
+                            else:
+                                price_text_fr = "Indisponible : aucun tarif n'est renseigné dans le catalogue."
+                                price_text_en = "Unavailable: no price is specified in the catalog."
+
+                            if visibility in ("Public", "Privée"):
+                                quote_followup_fr = "Un devis détaillé vous sera envoyé prochainement."
+                                quote_followup_en = "A detailed quotation will be sent to you shortly."
+                            else:
+                                quote_followup_fr = ""
+                                quote_followup_en = ""
+
+                            disclaimer_fr = "Le prix indiqué est donné à titre indicatif. Seul le devis signé fait foi."
+                            disclaimer_en = "The displayed price is indicative only. Only the signed quotation is authoritative."
+
+                            if st.session_state.language == "fr":
+                                body = (
+                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
+                                    f"Votre demande d'analyse a été acceptée.\n\n"
+                                    f"Référence de la demande : {record.get('id', '')}\n"
+                                    f"Nombre d'échantillons : {sample_count}\n"
+                                    f"Type d'analyse : {analysis_type}\n"
+                                    f"Mode d'injection / ionisation : {analysis_mode or 'Non applicable'}\n"
+                                    f"Type de laboratoire : {visibility}\n"
+                                    f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n\n"
+                                    f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\n\n"
+                                    "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
+                                )
+                            else:
+                                body = (
+                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
+                                    "Your analysis request has been accepted.\n\n"
+                                    f"Request reference: {record.get('id', '')}\n"
+                                    f"Number of samples: {sample_count}\n"
+                                    f"Analysis type: {analysis_type}\n"
+                                    f"Injection / ionization mode: {analysis_mode or 'Not applicable'}\n"
+                                    f"Laboratory type: {visibility}\n"
+                                    f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n\n"
+                                    f"Comment: {comment.strip() or 'No comment.'}\n\n"
+                                    "Best regards,\nOV-Chimie-Metabolisme Platform"
+                                )
+                        else:
+                            body = t("mail_user_body").format(
                                 manager=record.get("project_manager", ""),
                                 project=record.get("project_name", ""),
                                 status=status_display[status_options.index(new_status)],
                                 comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
-                            ),
-                            cc=join_email_recipients(record.get("admin_email", ""), record.get("platform_staff_email", "")),
+                            )
+                        send_email(
+                            email, t("mail_user_subject"), body,
+                            cc=join_email_recipients(*cc_addresses),
                         )
                         st.success(t("decision_saved"))
                     except Exception as exc:
@@ -2545,6 +2626,7 @@ def render_form():
                                 "analysis_type": data.get("analysis_type", ""),
                                 "analysis_mode": data.get("analysis_mode", ""),
                                 "analysis_details": data.get("analysis_details", ""),
+                                "sample_count": int(data.get("sample_count", 1) or 1),
                                 "group": data.get("group", ""),
                                 "request_date": data.get("date", ""),
                                 "submitted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
