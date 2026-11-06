@@ -35,30 +35,35 @@ USER_PROFILES_PATH = "MyDrive/user_profiles.json"
 FAIR_FOLDER = CLOUD_FOLDER
 DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
 ANALYSIS_TYPES = [
-    "Métabolites primaires par GC-MS",
-    "Métabolomique non ciblée par LC-HRMS",
-    "Analyses d'acides gras par GC-MS",
-    "Analyse de stérols totaux par GC-MS",
+    "Métabolomique non ciblée (métabolites primaires) par GC-MS",
+    "Métabolomique non ciblée (métabolites secondaires) par LC-HRMS",
+    "Analyse des acides gras par GC-MS",
+    "Analyse des stérols totaux par GC-MS",
     "Lipidomique non ciblée par LC-HRMS",
-    "Lipidomique ciblée LC-MS/MS",
+    "Lipidomique ciblée par LC-MS/MS",
     "Oligoglycomique par LC-HRMS",
-    "Monosaccharides par GC-MS",
-    "Hormones par LC-MS/MS",
-    "Développements spécifiques par LC-MS/MS",
+    "Analyse des monosaccharides par GC-MS",
+    "Analyse des hormones par LC-MS/MS",
+    "Développement de méthodes spécifiques par GC-MS",
+    "Développement de méthodes spécifiques par LC-MS/MS",
+    "Développement de méthodes spécifiques par LC-HRMS",
 ]
-SPECIFIC_DEVELOPMENT_TYPE = "Développements spécifiques par LC-MS/MS"
+SPECIFIC_DEVELOPMENT_TYPE = "Développement de méthodes spécifiques par LC-MS/MS"
 ANALYSIS_TYPES_EN = {
-    "Métabolites primaires par GC-MS": "Primary metabolites by GC-MS",
-    "Métabolomique non ciblée par LC-HRMS": "Untargeted metabolomics by LC-HRMS",
-    "Analyses d'acides gras par GC-MS": "Fatty acid analysis by GC-MS",
-    "Analyse de stérols totaux par GC-MS": "Total sterol analysis by GC-MS",
+    "Métabolomique non ciblée (métabolites primaires) par GC-MS": "Untargeted metabolomics (primary metabolites) by GC-MS",
+    "Métabolomique non ciblée (métabolites secondaires) par LC-HRMS": "Untargeted metabolomics (secondary metabolites) by LC-HRMS",
+    "Analyse des acides gras par GC-MS": "Fatty acid analysis by GC-MS",
+    "Analyse des stérols totaux par GC-MS": "Total sterol analysis by GC-MS",
     "Lipidomique non ciblée par LC-HRMS": "Untargeted lipidomics by LC-HRMS",
-    "Lipidomique ciblée LC-MS/MS": "Targeted lipidomics by LC-MS/MS",
+    "Lipidomique ciblée par LC-MS/MS": "Targeted lipidomics by LC-MS/MS",
     "Oligoglycomique par LC-HRMS": "Oligoglycomics by LC-HRMS",
-    "Monosaccharides par GC-MS": "Monosaccharides by GC-MS",
-    "Hormones par LC-MS/MS": "Hormones by LC-MS/MS",
-    "Développements spécifiques par LC-MS/MS": "Specific developments by LC-MS/MS",
+    "Analyse des monosaccharides par GC-MS": "Monosaccharide analysis by GC-MS",
+    "Analyse des hormones par LC-MS/MS": "Hormone analysis by LC-MS/MS",
+    "Développement de méthodes spécifiques par GC-MS": "Custom method development by GC-MS",
+    "Développement de méthodes spécifiques par LC-MS/MS": "Custom method development by LC-MS/MS",
+    "Développement de méthodes spécifiques par LC-HRMS": "Custom method development by LC-HRMS",
 }
+
 TRANSLATIONS = {
     "fr": {
         "language": "Langue / Language", "form": "Formulaire de demande",
@@ -359,8 +364,19 @@ def normalize_analysis_type_name(value):
     """Correct known French labels and ensure every analysis type ends with an MS platform."""
     name = str(value or "").strip()
     corrections = {
+        "Métabolites primaires par GC-MS": "Métabolomique non ciblée (métabolites primaires) par GC-MS",
+        "Métabolomique non ciblée par LC-HRMS": "Métabolomique non ciblée (métabolites secondaires) par LC-HRMS",
+        "Analyses d'acides gras par GC-MS": "Analyse des acides gras par GC-MS",
+        "Analyse de stérols totaux par GC-MS": "Analyse des stérols totaux par GC-MS",
         "Lipidomique non ciblée LC-HRMS": "Lipidomique non ciblée par LC-HRMS",
-        "Développements spécifiques": "Développements spécifiques par LC-MS/MS",
+        "Lipidomique ciblée LC-MS/MS": "Lipidomique ciblée par LC-MS/MS",
+        "Oligoglycomique par LC-HRMS": "Oligoglycomique par LC-HRMS",
+        "Monosaccharides par GC-MS": "Analyse des monosaccharides par GC-MS",
+        "Hormones par LC-MS/MS": "Analyse des hormones par LC-MS/MS",
+        "Développements spécifiques par GC-MS": "Développement de méthodes spécifiques par GC-MS",
+        "Développements spécifiques par LC-MS/MS": "Développement de méthodes spécifiques par LC-MS/MS",
+        "Développements spécifiques par LC-HRMS": "Développement de méthodes spécifiques par LC-HRMS",
+        "Développements spécifiques": "Développement de méthodes spécifiques par LC-MS/MS",
     }
     name = corrections.get(name, name)
     if not name.endswith(("LC-HRMS", "GC-MS", "LC-MS/MS")):
@@ -386,13 +402,15 @@ def load_notification_settings():
         "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
         "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
         "analysis_types": list(dict.fromkeys(
-            normalize_analysis_type_name(x)
-            for x in (
-                settings.get("analysis_types", ANALYSIS_TYPES)
-                if isinstance(settings.get("analysis_types", ANALYSIS_TYPES), list)
-                else ANALYSIS_TYPES
-            )
-            if str(x).strip()
+            ANALYSIS_TYPES + [
+                normalize_analysis_type_name(x)
+                for x in (
+                    settings.get("analysis_types", ANALYSIS_TYPES)
+                    if isinstance(settings.get("analysis_types", ANALYSIS_TYPES), list)
+                    else ANALYSIS_TYPES
+                )
+                if str(x).strip() and normalize_analysis_type_name(x) not in ANALYSIS_TYPES
+            ]
         )),
         "analysis_type_translations": {
             **ANALYSIS_TYPES_EN,
@@ -1692,7 +1710,7 @@ def render_admin():
             ),
         },
     )
-    col_save, col_add, col_delete = st.columns([1.2, 1, 1])
+    col_save, col_add, col_edit, col_delete = st.columns([1.2, 1, 1, 1])
     with col_save:
         save_catalog_clicked = st.button(
             "Enregistrer le tableau" if is_fr else "Save catalog",
@@ -1702,6 +1720,11 @@ def render_admin():
         add_catalog_clicked = st.button(
             "Ajouter un type" if is_fr else "Add analysis type",
             key="add_analysis_catalog_type"
+        )
+    with col_edit:
+        edit_catalog_clicked = st.button(
+            "Modifier un nom" if is_fr else "Rename an analysis type",
+            key="edit_analysis_catalog_type"
         )
     with col_delete:
         delete_catalog_clicked = st.button(
@@ -1792,6 +1815,46 @@ def render_admin():
                     persist_analysis_catalog(updated_rows)
                     st.session_state.pop("show_add_analysis_catalog_type", None)
                     st.success("Type d'analyse ajouté." if is_fr else "Analysis type added.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"{t('cloud_error')} {exc}")
+
+    if edit_catalog_clicked:
+        st.session_state["show_edit_analysis_catalog_type"] = True
+    if st.session_state.get("show_edit_analysis_catalog_type", False) and managed_types:
+        edit_labels = {
+            item: item if is_fr else type_translations.get(item, ANALYSIS_TYPES_EN.get(item, item))
+            for item in managed_types
+        }
+        with st.form("edit_analysis_catalog_type_form"):
+            selected_edit_label = st.selectbox(
+                "Type à modifier" if is_fr else "Analysis type to rename",
+                options=list(edit_labels.values()),
+            )
+            type_to_edit = next((key for key, value in edit_labels.items() if value == selected_edit_label), selected_edit_label)
+            current_english = type_translations.get(type_to_edit, ANALYSIS_TYPES_EN.get(type_to_edit, type_to_edit))
+            renamed_fr = st.text_input("Nouveau nom français" if is_fr else "New French name", value=type_to_edit)
+            renamed_en = st.text_input("Nouveau nom anglais" if is_fr else "New English name", value=current_english)
+            confirm_rename_type = st.form_submit_button("Enregistrer le nouveau nom" if is_fr else "Save new name")
+        if confirm_rename_type:
+            new_canonical = normalize_analysis_type_name(renamed_fr)
+            if not renamed_fr.strip():
+                st.warning("Le nouveau nom est obligatoire." if is_fr else "The new name is required.")
+            elif any(x != type_to_edit and x.casefold() == new_canonical.casefold() for x in managed_types):
+                st.warning(t("analysis_type_exists"))
+            else:
+                try:
+                    rows = edited_catalog_rows()
+                    for row in rows:
+                        row_canonical = str(row.get("_canonical_type", row.get(type_column, ""))).strip()
+                        if row_canonical == type_to_edit:
+                            row["_canonical_type"] = new_canonical
+                            row[type_column] = new_canonical if is_fr else (renamed_en.strip() or new_canonical)
+                    type_translations.pop(type_to_edit, None)
+                    type_translations[new_canonical] = renamed_en.strip() or new_canonical
+                    persist_analysis_catalog(rows)
+                    st.session_state.pop("show_edit_analysis_catalog_type", None)
+                    st.success("Nom du type d'analyse modifié." if is_fr else "Analysis type renamed.")
                     st.rerun()
                 except Exception as exc:
                     st.error(f"{t('cloud_error')} {exc}")
@@ -2269,7 +2332,7 @@ def render_form():
                 selected_analysis_label if st.session_state.language == "fr"
                 else available_analysis_types[analysis_labels.index(selected_analysis_label)]
             )
-            if data["analysis_type"] == SPECIFIC_DEVELOPMENT_TYPE:
+            if data["analysis_type"].startswith("Développement de méthodes spécifiques") or data["analysis_type"].startswith("Développements spécifiques"):
                 st.text_area(
                     t("specific_development_details"),
                     value=data.get("analysis_details", ""),
@@ -2318,7 +2381,7 @@ def render_form():
                 (t("date"), data.get("date", "")),
                 (t("manager_email"), data.get("manager_email", "")),
                 (t("analysis_type"), data.get("analysis_type", "")),
-                (t("specific_development_details"), data.get("analysis_details", "") if data.get("analysis_type") == SPECIFIC_DEVELOPMENT_TYPE else ""),
+                (t("specific_development_details"), data.get("analysis_details", "") if (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques")) else ""),
                 (t("project_name"), data.get("project_name", "")),
                 (t("funding"), data.get("funding", "NO")),
                 (t("guidance"), data.get("guidance", "NO")),
@@ -2361,12 +2424,12 @@ def render_form():
             ]
             email_is_valid = bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", data.get("manager_email", "").strip()))
             specific_details_valid = (
-                data.get("analysis_type") != SPECIFIC_DEVELOPMENT_TYPE
+                not (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques"))
                 or bool(data.get("analysis_details", "").strip())
             )
             form_is_valid = all(required_values) and email_is_valid and specific_details_valid
             if not form_is_valid:
-                if data.get("analysis_type") == SPECIFIC_DEVELOPMENT_TYPE and not data.get("analysis_details", "").strip():
+                if (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques")) and not data.get("analysis_details", "").strip():
                     st.warning(t("specific_development_required"))
                 else:
                     st.warning(t("required"))
