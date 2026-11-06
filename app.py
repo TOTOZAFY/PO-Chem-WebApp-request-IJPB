@@ -388,6 +388,10 @@ def load_notification_settings():
                 else {}
             ),
         },
+        "analysis_catalog": (
+            settings.get("analysis_catalog", [])
+            if isinstance(settings.get("analysis_catalog", []), list) else []
+        ),
     }
 
 
@@ -1591,6 +1595,7 @@ def render_admin():
                     "admin_cc_email": admin_secondary.strip(),
                     "analysis_types": notification_settings.get("analysis_types", ANALYSIS_TYPES),
                     "analysis_type_translations": notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN),
+                    "analysis_catalog": notification_settings.get("analysis_catalog", []),
                 })
                 st.success(t("notification_settings_saved"))
                 st.rerun()
@@ -1598,87 +1603,178 @@ def render_admin():
                 st.error(f"{t('cloud_error')} {exc}")
 
     st.subheader(t("manage_analysis_types"))
+    is_fr = st.session_state.language == "fr"
     managed_types = notification_settings.get("analysis_types") or ANALYSIS_TYPES.copy()
-    with st.form("add_analysis_type_form"):
-        new_type = st.text_input(t("new_analysis_type"))
-        new_type_en = st.text_input(t("new_analysis_type_en"))
-        add_type = st.form_submit_button(t("save_analysis_type"))
-    if add_type:
-        candidate = new_type.strip()
-        candidate_en = new_type_en.strip()
-        if not candidate or not candidate_en:
-            st.warning(t("analysis_type_translation_required"))
-        elif any(candidate.casefold() == item.casefold() for item in managed_types):
-            st.warning(t("analysis_type_exists"))
-        else:
-            try:
-                managed_types.append(candidate)
-                type_translations = notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN.copy())
-                type_translations[candidate] = candidate_en
-                save_notification_settings({
-                    "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
-                    "admin_cc_email": notification_settings.get("admin_cc_email", ""),
-                    "analysis_types": managed_types,
-                    "analysis_type_translations": type_translations,
-                })
-                st.success(t("analysis_type_translation_saved"))
-                st.rerun()
-            except Exception as exc:
-                st.error(f"{t('cloud_error')} {exc}")
+    type_translations = notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN.copy())
+    stored_catalog = notification_settings.get("analysis_catalog", [])
+    catalog_by_type = {
+        str(item.get("type", "")).strip(): item
+        for item in stored_catalog
+        if isinstance(item, dict) and str(item.get("type", "")).strip()
+    }
+    def numeric_price(value):
+        """Return a JSON-safe numeric price; keep empty cells as None."""
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        # Migrate legacy text prices such as "125,50 €" to numeric values.
+        cleaned = str(value).strip().replace(" ", "").replace(",", ".")
+        cleaned = re.sub(r"[^0-9.\\-]", "", cleaned)
+        try:
+            return float(cleaned) if cleaned else None
+        except ValueError:
+            return None
 
-    st.markdown(f"**{t('edit_analysis_type_translation')}**")
-    current_type_translations = notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN.copy())
-    with st.form("edit_analysis_type_translation_form"):
-        type_to_translate = st.selectbox(
-            t("select_analysis_type_translation"),
-            options=managed_types,
-            key="type_to_translate",
+    catalog_rows = []
+    for analysis_type in managed_types:
+        saved = catalog_by_type.get(analysis_type, {})
+        catalog_rows.append({
+            "Type d'analyse" if is_fr else "Analysis type": analysis_type,
+            "Prix public" if is_fr else "Public price": numeric_price(saved.get("public_price")),
+            "Prix privé" if is_fr else "Private price": numeric_price(saved.get("private_price")),
+            "Prix public INRAE" if is_fr else "INRAE public price": numeric_price(saved.get("inrae_public_price")),
+        })
+
+    st.caption(
+        "Saisissez des montants numériques en euros. Les cellules vides correspondent à un tarif non renseigné."
+        if is_fr else
+        "Enter numeric amounts in euros. Empty cells mean that no price has been set."
+    )
+    edited_catalog = st.data_editor(
+        catalog_rows,
+        key="analysis_tariff_catalog_editor",
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        column_config={
+            ("Type d'analyse" if is_fr else "Analysis type"): st.column_config.TextColumn(
+                "Type d'analyse" if is_fr else "Analysis type", required=True
+            ),
+            ("Prix public" if is_fr else "Public price"): st.column_config.NumberColumn(
+                "Prix public (€)" if is_fr else "Public price (€)",
+                min_value=0.0, step=0.01, format="%.2f €"
+            ),
+            ("Prix privé" if is_fr else "Private price"): st.column_config.NumberColumn(
+                "Prix privé (€)" if is_fr else "Private price (€)",
+                min_value=0.0, step=0.01, format="%.2f €"
+            ),
+            ("Prix public INRAE" if is_fr else "INRAE public price"): st.column_config.NumberColumn(
+                "Prix public INRAE (€)" if is_fr else "INRAE public price (€)",
+                min_value=0.0, step=0.01, format="%.2f €"
+            ),
+        },
+    )
+    col_save, col_add, col_delete = st.columns([1.2, 1, 1])
+    with col_save:
+        save_catalog_clicked = st.button(
+            "Enregistrer le tableau" if is_fr else "Save catalog",
+            type="primary", key="save_analysis_tariff_catalog"
         )
-        edited_translation = st.text_input(
-            t("new_analysis_type_en"),
-            value=current_type_translations.get(type_to_translate, ""),
-            key="edited_analysis_type_translation",
+    with col_add:
+        add_catalog_clicked = st.button(
+            "Ajouter un type" if is_fr else "Add analysis type",
+            key="add_analysis_catalog_type"
         )
-        save_translation = st.form_submit_button(t("save_analysis_type_translation"))
-    if save_translation:
-        if not edited_translation.strip():
-            st.warning(t("analysis_type_translation_required"))
-        else:
-            try:
-                current_type_translations[type_to_translate] = edited_translation.strip()
-                save_notification_settings({
-                    "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
-                    "admin_cc_email": notification_settings.get("admin_cc_email", ""),
-                    "analysis_types": managed_types,
-                    "analysis_type_translations": current_type_translations,
-                })
-                st.success(t("analysis_type_translation_saved"))
-                st.rerun()
-            except Exception as exc:
-                st.error(f"{t('cloud_error')} {exc}")
+    with col_delete:
+        delete_catalog_clicked = st.button(
+            "Supprimer un type" if is_fr else "Delete analysis type",
+            key="delete_analysis_catalog_type"
+        )
+
+    def persist_analysis_catalog(rows):
+        cleaned_types = []
+        cleaned_catalog = []
+        cleaned_translations = dict(type_translations)
+        for row in rows:
+            label = str(row.get("Type d'analyse" if is_fr else "Analysis type", "")).strip()
+            if not label:
+                continue
+            if label in cleaned_types:
+                raise ValueError("Un type d'analyse est présent plusieurs fois." if is_fr else "An analysis type is duplicated.")
+            cleaned_types.append(label)
+            cleaned_catalog.append({
+                "type": label,
+                "public_price": numeric_price(row.get("Prix public" if is_fr else "Public price")),
+                "private_price": numeric_price(row.get("Prix privé" if is_fr else "Private price")),
+                "inrae_public_price": numeric_price(row.get("Prix public INRAE" if is_fr else "INRAE public price")),
+            })
+            cleaned_translations.setdefault(label, ANALYSIS_TYPES_EN.get(label, label))
+        if SPECIFIC_DEVELOPMENT_TYPE not in cleaned_types:
+            cleaned_types.append(SPECIFIC_DEVELOPMENT_TYPE)
+            cleaned_catalog.append({
+                "type": SPECIFIC_DEVELOPMENT_TYPE,
+                "public_price": None, "private_price": None, "inrae_public_price": None
+            })
+        save_notification_settings({
+            "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
+            "admin_cc_email": notification_settings.get("admin_cc_email", ""),
+            "analysis_types": cleaned_types,
+            "analysis_type_translations": cleaned_translations,
+            "analysis_catalog": cleaned_catalog,
+        })
+
+    if save_catalog_clicked:
+        try:
+            persist_analysis_catalog(edited_catalog.to_dict(orient="records"))
+            st.success("Catalogue tarifaire enregistré." if is_fr else "Tariff catalog saved.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"{t('cloud_error')} {exc}")
+
+    if add_catalog_clicked:
+        st.session_state["show_add_analysis_catalog_type"] = True
+    if st.session_state.get("show_add_analysis_catalog_type", False):
+        with st.form("new_analysis_catalog_type_form"):
+            new_type = st.text_input("Nom du type d'analyse" if is_fr else "Analysis type name")
+            new_type_en = st.text_input("Nom anglais" if is_fr else "English name")
+            confirm_add_type = st.form_submit_button("Ajouter" if is_fr else "Add")
+        if confirm_add_type:
+            candidate = new_type.strip()
+            if not candidate:
+                st.warning("Le nom du type est obligatoire." if is_fr else "Analysis type name is required.")
+            elif any(candidate.casefold() == item.casefold() for item in managed_types):
+                st.warning(t("analysis_type_exists"))
+            else:
+                try:
+                    updated_rows = edited_catalog.to_dict(orient="records")
+                    updated_rows.append({
+                        "Type d'analyse" if is_fr else "Analysis type": candidate,
+                        "Prix public" if is_fr else "Public price": None,
+                        "Prix privé" if is_fr else "Private price": None,
+                        "Prix public INRAE" if is_fr else "INRAE public price": None,
+                    })
+                    if new_type_en.strip():
+                        type_translations[candidate] = new_type_en.strip()
+                    persist_analysis_catalog(updated_rows)
+                    st.session_state.pop("show_add_analysis_catalog_type", None)
+                    st.success("Type d'analyse ajouté." if is_fr else "Analysis type added.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"{t('cloud_error')} {exc}")
 
     removable_types = [item for item in managed_types if item != SPECIFIC_DEVELOPMENT_TYPE]
-    if removable_types:
-        with st.form("remove_analysis_type_form"):
-            type_to_remove = st.selectbox(t("remove_analysis_type"), options=removable_types)
-            remove_type = st.form_submit_button(t("delete_analysis_type"))
-        if remove_type:
+    if delete_catalog_clicked and removable_types:
+        st.session_state["show_delete_analysis_catalog_type"] = True
+    if st.session_state.get("show_delete_analysis_catalog_type", False) and removable_types:
+        with st.form("delete_analysis_catalog_type_form"):
+            type_to_remove = st.selectbox(
+                "Type à supprimer" if is_fr else "Type to delete",
+                options=removable_types,
+            )
+            confirm_delete_type = st.form_submit_button("Confirmer la suppression" if is_fr else "Confirm deletion")
+        if confirm_delete_type:
             try:
-                updated_types = [item for item in managed_types if item != type_to_remove]
-                if not updated_types:
-                    st.warning(t("analysis_type_required"))
-                else:
-                    save_notification_settings({
-                        "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
-                        "admin_cc_email": notification_settings.get("admin_cc_email", ""),
-                        "analysis_types": updated_types,
-                        "analysis_type_translations": notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN),
-                    })
-                    st.success(t("analysis_type_removed"))
-                    st.rerun()
+                remaining_rows = [
+                    row for row in edited_catalog.to_dict(orient="records")
+                    if str(row.get("Type d'analyse" if is_fr else "Analysis type", "")).strip() != type_to_remove
+                ]
+                persist_analysis_catalog(remaining_rows)
+                st.session_state.pop("show_delete_analysis_catalog_type", None)
+                st.success("Type d'analyse supprimé." if is_fr else "Analysis type deleted.")
+                st.rerun()
             except Exception as exc:
                 st.error(f"{t('cloud_error')} {exc}")
-    st.caption(t("analysis_type_locked"))
 
     # Archived requests remain in the same Nextcloud metadata file; only their
     # archived flag changes. This preserves existing records and compatibility.
