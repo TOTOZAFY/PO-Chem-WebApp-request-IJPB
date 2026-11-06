@@ -39,25 +39,25 @@ ANALYSIS_TYPES = [
     "Métabolomique non ciblée par LC-HRMS",
     "Analyses d'acides gras par GC-MS",
     "Analyse de stérols totaux par GC-MS",
-    "Lipidomique non ciblée LC-HRMS",
+    "Lipidomique non ciblée par LC-HRMS",
     "Lipidomique ciblée LC-MS/MS",
     "Oligoglycomique par LC-HRMS",
     "Monosaccharides par GC-MS",
     "Hormones par LC-MS/MS",
-    "Développements spécifiques",
+    "Développements spécifiques par LC-MS/MS",
 ]
-SPECIFIC_DEVELOPMENT_TYPE = "Développements spécifiques"
+SPECIFIC_DEVELOPMENT_TYPE = "Développements spécifiques par LC-MS/MS"
 ANALYSIS_TYPES_EN = {
     "Métabolites primaires par GC-MS": "Primary metabolites by GC-MS",
     "Métabolomique non ciblée par LC-HRMS": "Untargeted metabolomics by LC-HRMS",
     "Analyses d'acides gras par GC-MS": "Fatty acid analysis by GC-MS",
     "Analyse de stérols totaux par GC-MS": "Total sterol analysis by GC-MS",
-    "Lipidomique non ciblée LC-HRMS": "Untargeted lipidomics by LC-HRMS",
+    "Lipidomique non ciblée par LC-HRMS": "Untargeted lipidomics by LC-HRMS",
     "Lipidomique ciblée LC-MS/MS": "Targeted lipidomics by LC-MS/MS",
     "Oligoglycomique par LC-HRMS": "Oligoglycomics by LC-HRMS",
     "Monosaccharides par GC-MS": "Monosaccharides by GC-MS",
     "Hormones par LC-MS/MS": "Hormones by LC-MS/MS",
-    "Développements spécifiques": "Specific developments",
+    "Développements spécifiques par LC-MS/MS": "Specific developments by LC-MS/MS",
 }
 TRANSLATIONS = {
     "fr": {
@@ -355,6 +355,19 @@ def save_metadata(records):
     response.raise_for_status()
 
 
+def normalize_analysis_type_name(value):
+    """Correct known French labels and ensure every analysis type ends with an MS platform."""
+    name = str(value or "").strip()
+    corrections = {
+        "Lipidomique non ciblée LC-HRMS": "Lipidomique non ciblée par LC-HRMS",
+        "Développements spécifiques": "Développements spécifiques par LC-MS/MS",
+    }
+    name = corrections.get(name, name)
+    if not name.endswith(("LC-HRMS", "GC-MS", "LC-MS/MS")):
+        name += " par LC-MS/MS"
+    return name
+
+
 def load_notification_settings():
     """Load editable notification recipients from Nextcloud."""
     response = webdav_request("GET", NOTIFICATION_SETTINGS_PATH)
@@ -372,12 +385,15 @@ def load_notification_settings():
     return {
         "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
         "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
-        "analysis_types": (
-            [str(x).strip() for x in settings.get("analysis_types", ANALYSIS_TYPES)
-             if str(x).strip()]
-            if isinstance(settings.get("analysis_types", ANALYSIS_TYPES), list)
-            else ANALYSIS_TYPES.copy()
-        ),
+        "analysis_types": list(dict.fromkeys(
+            normalize_analysis_type_name(x)
+            for x in (
+                settings.get("analysis_types", ANALYSIS_TYPES)
+                if isinstance(settings.get("analysis_types", ANALYSIS_TYPES), list)
+                else ANALYSIS_TYPES
+            )
+            if str(x).strip()
+        )),
         "analysis_type_translations": {
             **ANALYSIS_TYPES_EN,
             **(
@@ -1608,9 +1624,13 @@ def render_admin():
     type_translations = notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN.copy())
     stored_catalog = notification_settings.get("analysis_catalog", [])
     catalog_by_type = {
-        str(item.get("type", "")).strip(): item
+        normalize_analysis_type_name(item.get("type", "")): item
         for item in stored_catalog
         if isinstance(item, dict) and str(item.get("type", "")).strip()
+    }
+    type_translations = {
+        normalize_analysis_type_name(key): value
+        for key, value in type_translations.items()
     }
     def numeric_price(value):
         """Return a JSON-safe numeric price; keep empty cells as None."""
@@ -1736,12 +1756,22 @@ def render_admin():
     if add_catalog_clicked:
         st.session_state["show_add_analysis_catalog_type"] = True
     if st.session_state.get("show_add_analysis_catalog_type", False):
+        st.info(
+            "Important : chaque type d'analyse doit se terminer par une méthode analytique : LC-HRMS, GC-MS ou LC-MS/MS. Choisissez le suffixe ci-dessous ; il sera ajouté automatiquement."
+            if is_fr else
+            "Important: every analysis type must end with an analytical method: LC-HRMS, GC-MS or LC-MS/MS. Select the suffix below; it will be added automatically."
+        )
         with st.form("new_analysis_catalog_type_form"):
-            new_type = st.text_input("Nom du type d'analyse" if is_fr else "Analysis type name")
-            new_type_en = st.text_input("Nom anglais" if is_fr else "English name")
+            new_type = st.text_input("Nom du type d'analyse (sans la méthode à la fin)" if is_fr else "Analysis type name (without the method suffix)")
+            new_type_method = st.selectbox(
+                "Méthode analytique à ajouter à la fin" if is_fr else "Analytical method suffix",
+                options=["LC-HRMS", "GC-MS", "LC-MS/MS"],
+            )
+            new_type_en = st.text_input("Nom anglais (sans la méthode à la fin)" if is_fr else "English name (without the method suffix)")
             confirm_add_type = st.form_submit_button("Ajouter" if is_fr else "Add")
         if confirm_add_type:
-            candidate = new_type.strip()
+            base_candidate = new_type.strip().rstrip(" -")
+            candidate = normalize_analysis_type_name(f"{base_candidate} {new_type_method}") if base_candidate else ""
             if not candidate:
                 st.warning("Le nom du type est obligatoire." if is_fr else "Analysis type name is required.")
             elif any(candidate.casefold() == item.casefold() for item in managed_types):
@@ -1757,7 +1787,8 @@ def render_admin():
                         inrae_column: None,
                     })
                     if new_type_en.strip():
-                        type_translations[candidate] = new_type_en.strip()
+                        english_base = new_type_en.strip().rstrip(" -")
+                        type_translations[candidate] = f"{english_base} {new_type_method}"
                     persist_analysis_catalog(updated_rows)
                     st.session_state.pop("show_add_analysis_catalog_type", None)
                     st.success("Type d'analyse ajouté." if is_fr else "Analysis type added.")
