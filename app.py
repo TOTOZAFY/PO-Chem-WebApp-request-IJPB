@@ -66,7 +66,7 @@ TRANSLATIONS = {
         "À la dernière étape, votre demande sera enregistrée dans Nextcloud et l'administrateur sera notifié.",
         "steps": ["Contacts", "Description du projet", "Échantillons", "Résultats & bibliographie",
                   "Informations complémentaires", "Vérification & soumission"],
-        "general": "1. Informations générales", "requester_section": "Demandeur", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Responsable du projet *",
+        "general": "1. Informations générales", "requester_section": "Demandeur", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Responsable du projet *", "manager_last_name": "Nom *", "manager_first_name": "Prénom *",
         "group": "Groupe / laboratoire *", "date": "Date", "phone": "Téléphone",
         "manager_email": "E-mail du responsable *", "admin_staff": "Personnel administratif",
         "admin_phone": "Téléphone du personnel administratif", "admin_email": "E-mail du personnel administratif (facultatif)",
@@ -176,7 +176,7 @@ TRANSLATIONS = {
         "At the final step, your request will be saved to Nextcloud and the administrator will be notified.",
         "steps": ["Contacts", "Project description", "Samples", "Preliminary results & bibliography",
                   "Additional information", "Review & submission"],
-        "general": "1. General information", "requester_section": "Requester", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Project manager *",
+        "general": "1. General information", "requester_section": "Requester", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Project manager *", "manager_last_name": "Last name *", "manager_first_name": "First name *",
         "group": "Group / laboratory *", "date": "Date", "phone": "Telephone",
         "manager_email": "Project manager email *", "admin_staff": "Administrative staff",
         "admin_phone": "Administrative staff telephone", "admin_email": "Administrative staff email (optional)",
@@ -527,7 +527,7 @@ def build_document(form_data):
     if len(doc.tables) < 2:
         raise ValueError("Le modèle Word ne contient pas le tableau de formulaire attendu.")
     table = doc.tables[1]
-    add_to_existing_paragraph(table.cell(0, 0).paragraphs[0], form_data.get("project_manager"))
+    add_to_existing_paragraph(table.cell(0, 0).paragraphs[0], " ".join(part for part in (form_data.get("project_manager", ""), form_data.get("project_manager_first_name", "")) if part))
     add_to_existing_paragraph(table.cell(0, 2).paragraphs[0], form_data.get("group"))
     add_to_existing_paragraph(table.cell(1, 0).paragraphs[0], form_data.get("date"))
     add_to_existing_paragraph(table.cell(1, 1).paragraphs[0], form_data.get("manager_phone"))
@@ -1760,7 +1760,7 @@ def render_admin():
                             subject = "Compléter les métadonnées FAIR – " + record.get("project_name", "")
                             if st.session_state.language == "fr":
                                 body = (
-                                    "Bonjour " + record.get("project_manager", "") + ",\n\n"
+                                    "Bonjour " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
                                     "Merci de compléter les métadonnées FAIR de votre demande.\n"
                                     "Référence de votre demande : " + str(record.get("id", "")) + "\n"
                                     "Vous pouvez ouvrir l'application, choisir le menu FAIR, puis saisir cette référence et votre adresse e-mail de demandeur.\n\n"
@@ -1768,7 +1768,7 @@ def render_admin():
                                 )
                             else:
                                 body = (
-                                    "Hello " + record.get("project_manager", "") + ",\n\n"
+                                    "Hello " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
                                     "Please complete the FAIR metadata for your request.\n"
                                     "Your request reference: " + str(record.get("id", "")) + "\n"
                                     "Open the application, select the FAIR menu, then enter this reference and your requester email address.\n\n"
@@ -2027,7 +2027,8 @@ def render_form():
             st.markdown(f"**{t('requester_section')}**")
             requester_left, requester_right = st.columns(2)
             with requester_left:
-                text_field("project_manager", t("manager"))
+                text_field("project_manager", t("manager_last_name"))
+                text_field("project_manager_first_name", t("manager_first_name"))
                 text_field("group", t("group"))
                 selected_date = st.date_input(t("date"), value=date.fromisoformat(data["date"]) if data.get("date") else date.today())
                 data["date"] = selected_date.isoformat()
@@ -2106,7 +2107,7 @@ def render_form():
         else:
             st.subheader(t("review"))
             summary = [
-                (t("manager"), data.get("project_manager", "")),
+                (t("manager"), " ".join(part for part in (data.get("project_manager", ""), data.get("project_manager_first_name", "")) if part)),
                 (t("group"), data.get("group", "")),
                 (t("date"), data.get("date", "")),
                 (t("manager_email"), data.get("manager_email", "")),
@@ -2143,6 +2144,7 @@ def render_form():
                     st.markdown(f"**{answer_labels.get(key, key.replace('_', ' ').capitalize())} :** {value}")
             required_values = [
                 data.get("project_manager", "").strip(),
+                data.get("project_manager_first_name", "").strip(),
                 data.get("manager_email", "").strip(),
                 data.get("group", "").strip(),
                 data.get("project_name", "").strip(),
@@ -2188,7 +2190,8 @@ def render_form():
                             record = {
                                 "id": request_id,
                                 "project_name": data.get("project_name", ""),
-                                "project_manager": data.get("project_manager", ""),
+                                "project_manager": data.get("project_manager", "").strip(),
+                                "project_manager_first_name": data.get("project_manager_first_name", "").strip(),
                                 "manager_email": data.get("manager_email", ""),
                                 "admin_staff": data.get("admin_staff", ""),
                                 "admin_phone": data.get("admin_phone", ""),
@@ -2232,7 +2235,7 @@ def render_form():
                                     t("mail_admin_subject"),
                                     t("mail_admin_body").format(
                                         project=record["project_name"],
-                                        manager=record["project_manager"],
+                                        manager=record.get("project_manager_first_name") or record["project_manager"],
                                         group=record["group"],
                                         analysis_type=record.get("analysis_type", ""),
                                         analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
