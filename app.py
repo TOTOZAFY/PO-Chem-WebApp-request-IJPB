@@ -2562,8 +2562,12 @@ def render_form():
     steps = t("steps")
     step = min(st.session_state.step, len(steps) - 1)
 
-    st.markdown(
-        """
+    hero_title = (
+        "OV-Chimie-Métabolisme/IJPB-INRAE Versailles"
+        if st.session_state.get("language", "fr") == "fr"
+        else "PO Chemistry-Metabolism/IJPB-INRAE Versailles"
+    )
+    hero_html = """
         <style>
         .block-container {
             max-width: none !important;
@@ -2580,11 +2584,10 @@ def render_form():
         .hero h1 {margin: 0; color: #183b56; font-size: 1.8rem;}
         .hero p {margin: .4rem 0 0; color: #526575;}
         </style>
-        <div class="hero"><h1>{'OV-Chimie-Métabolisme/IJPB-INRAE Versailles' if st.session_state.get('language', 'fr') == 'fr' else 'PO Chemistry-Metabolism/IJPB-INRAE Versailles'}</h1>
+        <div class="hero"><h1>__HERO_TITLE__</h1>
         <p>PO-Chem-WebApp-Request</p></div>
-        """,
-        unsafe_allow_html=True,
-    )
+        """.replace("__HERO_TITLE__", hero_title)
+    st.markdown(hero_html, unsafe_allow_html=True)
     st.write(t("intro"))
 
     def text_field(key, label, **kwargs):
