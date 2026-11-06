@@ -1682,6 +1682,12 @@ def render_admin():
             key="delete_analysis_catalog_type"
         )
 
+    def edited_catalog_rows():
+        """Return data_editor output as a list of row dictionaries."""
+        if hasattr(edited_catalog, "to_dict"):
+            return edited_catalog.to_dict(orient="records")
+        return [dict(row) for row in edited_catalog]
+
     def persist_analysis_catalog(rows):
         cleaned_types = []
         cleaned_catalog = []
@@ -1716,7 +1722,7 @@ def render_admin():
 
     if save_catalog_clicked:
         try:
-            persist_analysis_catalog(edited_catalog.to_dict(orient="records"))
+            persist_analysis_catalog(edited_catalog_rows())
             st.success("Catalogue tarifaire enregistré." if is_fr else "Tariff catalog saved.")
             st.rerun()
         except Exception as exc:
@@ -1737,7 +1743,7 @@ def render_admin():
                 st.warning(t("analysis_type_exists"))
             else:
                 try:
-                    updated_rows = edited_catalog.to_dict(orient="records")
+                    updated_rows = edited_catalog_rows()
                     updated_rows.append({
                         "Type d'analyse" if is_fr else "Analysis type": candidate,
                         "Prix public" if is_fr else "Public price": None,
@@ -1766,7 +1772,7 @@ def render_admin():
         if confirm_delete_type:
             try:
                 remaining_rows = [
-                    row for row in edited_catalog.to_dict(orient="records")
+                    row for row in edited_catalog_rows()
                     if str(row.get("Type d'analyse" if is_fr else "Analysis type", "")).strip() != type_to_remove
                 ]
                 persist_analysis_catalog(remaining_rows)
