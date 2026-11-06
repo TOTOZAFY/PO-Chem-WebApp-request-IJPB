@@ -1979,6 +1979,13 @@ def render_admin():
         for item in notification_settings.get("analysis_catalog", [])
         if isinstance(item, dict) and str(item.get("type", "")).strip()
     }
+    # Keep stored laboratory categories unchanged for compatibility with existing requests.
+    revenue_categories = ("Privée", "Public", "Public (IJPB)")
+    revenue_labels = {
+        "Privée": "Privée" if is_fr else "Private",
+        "Public": "Publique" if is_fr else "Public",
+        "Public (IJPB)": "Publique (IJPB)" if is_fr else "Public (IJPB)",
+    }
     annual_revenue = {}
     annual_request_counts = {}
     missing_price_count = 0
@@ -1992,6 +1999,8 @@ def render_admin():
         analysis_type_key = normalize_analysis_type_name(str(item.get("analysis_type", "")))
         price_record = catalog_prices.get(analysis_type_key, {})
         lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
+        # Also accept French labels if they were persisted by an earlier form.
+        lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(lab_type, lab_type)
         price_key = {
             "Privée": "private_price",
             "Public": "public_price",
@@ -2009,31 +2018,48 @@ def render_admin():
         if unit_price is None:
             missing_price_count += 1
             continue
-        annual_revenue[year] = annual_revenue.get(year, 0.0) + unit_price * sample_count * multiplier
+        year_totals = annual_revenue.setdefault(year, {category: 0.0 for category in revenue_categories})
+        year_totals[lab_type] += unit_price * sample_count * multiplier
         annual_request_counts[year] = annual_request_counts.get(year, 0) + 1
 
     if annual_revenue:
         import pandas as pd
-        revenue_frame = pd.DataFrame(
-            [{"Année" if st.session_state.language == "fr" else "Year": year,
-              "Recettes indicatives (€)" if st.session_state.language == "fr" else "Indicative revenue (€)": round(amount, 2)}
-             for year, amount in sorted(annual_revenue.items())]
-        )
-        st.bar_chart(revenue_frame.set_index("Année" if st.session_state.language == "fr" else "Year"))
+        year_col = "Année" if is_fr else "Year"
+        total_col = "Total indicatif (€)" if is_fr else "Indicative total (€)"
+        category_cols = {category: f"{revenue_labels[category]} (€)" for category in revenue_categories}
+        revenue_frame = pd.DataFrame([
+            {
+                year_col: year,
+                **{category_cols[category]: round(amounts[category], 2) for category in revenue_categories},
+                total_col: round(sum(amounts.values()), 2),
+            }
+            for year, amounts in sorted(annual_revenue.items())
+        ])
+        st.bar_chart(revenue_frame.set_index(year_col)[list(category_cols.values())])
         st.dataframe(revenue_frame, use_container_width=True, hide_index=True)
-        total_estimated = sum(annual_revenue.values())
+        category_totals = {
+            category: sum(amounts[category] for amounts in annual_revenue.values())
+            for category in revenue_categories
+        }
+        category_metrics = st.columns(3)
+        for column, category in zip(category_metrics, revenue_categories):
+            column.metric(
+                revenue_labels[category],
+                f"{category_totals[category]:,.2f} €".replace(",", " "),
+            )
+        total_estimated = sum(category_totals.values())
         st.metric(
-            "Total indicatif cumulé" if st.session_state.language == "fr" else "Cumulative indicative total",
+            "Total indicatif cumulé" if is_fr else "Cumulative indicative total",
             f"{total_estimated:,.2f} €".replace(",", " ")
         )
-        count_label = "Demandes acceptées comptabilisées" if st.session_state.language == "fr" else "Accepted requests included"
+        count_label = "Demandes acceptées comptabilisées" if is_fr else "Accepted requests included"
         st.caption(f"{count_label} : {sum(annual_request_counts.values())}")
     else:
-        st.info("Aucune demande acceptée avec un tarif renseigné et une année d'acceptation identifiable." if st.session_state.language == "fr" else "No accepted requests with a catalog price and identifiable acceptance year.")
+        st.info("Aucune demande acceptée avec un tarif renseigné et une année d'acceptation identifiable." if is_fr else "No accepted requests with a catalog price and identifiable acceptance year.")
     if missing_price_count:
         st.warning(
             f"{missing_price_count} demande(s) acceptée(s) exclue(s) du calcul car aucun tarif correspondant n'est renseigné."
-            if st.session_state.language == "fr" else
+            if is_fr else
             f"{missing_price_count} accepted request(s) excluded because no matching catalog price is configured."
         )
 
