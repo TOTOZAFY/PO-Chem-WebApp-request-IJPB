@@ -68,7 +68,7 @@ TRANSLATIONS = {
     "fr": {
         "language": "Langue / Language", "form": "Formulaire de demande",
         "admin": "Espace administrateur", "intro": "Complétez les rubriques ci-dessous. "
-        "À la dernière étape, votre demande sera enregistrée dans Nextcloud et l'administrateur sera notifié. "
+        "À la dernière étape, votre demande sera enregistrée dans Nextcloud de la plateforme et l'administrateur sera notifié. "
         "La feuille de demande pourra également être téléchargée si nécessaire après la soumission.",
         "steps": ["Contacts", "Description du projet", "Échantillons", "Résultats & bibliographie",
                   "Informations complémentaires", "Vérification & soumission"],
@@ -188,7 +188,7 @@ TRANSLATIONS = {
     "en": {
         "language": "Language / Langue", "form": "Request form",
         "admin": "Administrator area", "intro": "Complete the sections below. "
-        "At the final step, your request will be saved to Nextcloud and the administrator will be notified. "
+        "At the final step, your request will be saved on the platform's Nextcloud and the administrator will be notified. "
         "The request form can also be downloaded after submission if needed.",
         "steps": ["Contacts", "Project description", "Samples", "Preliminary results & bibliography",
                   "Additional information", "Review & submission"],
