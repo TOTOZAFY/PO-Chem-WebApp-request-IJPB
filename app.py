@@ -132,8 +132,11 @@ TRANSLATIONS = {
         "platform_contact_email": "E-mail de contact de la plateforme",
         "platform_contact_help": "Cette adresse reçoit les nouvelles demandes. Elle est modifiable dans l'espace de gestion de la plateforme.",
         "platform_contact_caption": "Adresse de notification de la plateforme — affichée ici à titre informatif.",
-        "analysis_type": "Type d’analyse *", "analysis_type_stats": "Demandes par type d’analyse",
-         "analysis_type_required": "Veuillez sélectionner un type d’analyse.",
+        "analysis_type": "Type d’analyse et mode analytique *", "analysis_type_stats": "Demandes par type d’analyse",
+        "analysis_mode": "Mode d’ionisation / d’injection",
+        "analysis_mode_lchrms": "Mode d’ionisation (ESI)",
+        "analysis_mode_gc_ms": "Mode d’injection",
+        "analysis_type_required": "Veuillez sélectionner un type d’analyse.",
         "specific_development_details": "Détails du développement spécifique *",
         "specific_development_help": "Décrivez la demande : métabolites ou molécules ciblés, matrice, objectifs, méthode envisagée, contraintes ou besoins particuliers.",
         "specific_development_required": "Veuillez préciser le développement spécifique demandé.",
@@ -247,8 +250,11 @@ TRANSLATIONS = {
         "platform_contact_email": "Platform contact email",
         "platform_contact_help": "This address receives new requests. It can be changed in the platform management area.",
         "platform_contact_caption": "Platform notification address — displayed here for information.",
-        "analysis_type": "Analysis type *", "analysis_type_stats": "Requests by analysis type",
-         "analysis_type_required": "Please select an analysis type.",
+        "analysis_type": "Analysis type and analytical mode *", "analysis_type_stats": "Requests by analysis type",
+        "analysis_mode": "Ionization / injection mode",
+        "analysis_mode_lchrms": "Ionization mode (ESI)",
+        "analysis_mode_gc_ms": "Injection mode",
+        "analysis_type_required": "Please select an analysis type.",
         "specific_development_details": "Specific development details *",
         "specific_development_help": "Describe the request: target metabolites or molecules, sample matrix, objectives, proposed method, constraints or specific needs.",
         "specific_development_required": "Please describe the requested specific development.",
@@ -632,6 +638,17 @@ def build_document(form_data):
         )
         type_run.bold = True
         type_run.font.size = Pt(9)
+
+    analysis_mode = form_data.get("analysis_mode", "").strip()
+    if analysis_mode:
+        mode_paragraph = samples_cell.add_paragraph()
+        mode_paragraph.paragraph_format.space_after = Pt(4)
+        mode_run = mode_paragraph.add_run(
+            ("Mode d’ionisation / d’injection : " if st.session_state.get("language", "fr") == "fr" else "Ionization / injection mode: ")
+            + analysis_mode
+        )
+        mode_run.bold = True
+        mode_run.font.size = Pt(9)
 
     analysis_details = form_data.get("analysis_details", "").strip()
     if analysis_details:
@@ -1955,7 +1972,7 @@ def render_admin():
         from io import StringIO
         csv_buffer = StringIO()
         fields = ["id", "project_name", "project_manager", "manager_email", "group",
-                  "request_date", "submitted_at", "status", "admin_comment", "document_path", "quote_signed", "signed_quote_path", "analysis_type", "analysis_details"]
+                  "request_date", "submitted_at", "status", "admin_comment", "document_path", "quote_signed", "signed_quote_path", "analysis_type", "analysis_mode", "analysis_details"]
         writer = csv.DictWriter(csv_buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(active_records)
@@ -1988,6 +2005,8 @@ def render_admin():
             stored_type = record.get("analysis_type", "")
             shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
             st.write(f"**{t('analysis_type')} :** {shown_type or '—'}")
+            if record.get("analysis_mode"):
+                st.write(f"**{t('analysis_mode')} :** {record.get('analysis_mode')}")
             if record.get("analysis_details"):
                 details_label = "Détails du développement spécifique" if st.session_state.language == "fr" else "Specific development details"
                 st.write(f"**{details_label} :** {record.get('analysis_details')}")
@@ -2321,21 +2340,45 @@ def render_form():
             st.caption(
                 t("platform_contact_caption")
             )
+            # The first Platform field combines the analysis type and, when relevant,
+            # its acquisition mode. This keeps ESI/Split choices inside the same field.
             current_analysis_type = data.get("analysis_type", available_analysis_types[0])
-            analysis_index = available_analysis_types.index(current_analysis_type) if current_analysis_type in available_analysis_types else 0
-            analysis_labels = available_analysis_types if st.session_state.language == "fr" else [
-                available_analysis_type_translations.get(item, ANALYSIS_TYPES_EN.get(item, item)) for item in available_analysis_types
-            ]
+            current_analysis_mode = data.get("analysis_mode", "")
+            analysis_selection_labels = []
+            analysis_selection_values = []
+            for canonical_type in available_analysis_types:
+                translated_type = (
+                    canonical_type if st.session_state.language == "fr"
+                    else available_analysis_type_translations.get(
+                        canonical_type, ANALYSIS_TYPES_EN.get(canonical_type, canonical_type)
+                    )
+                )
+                if canonical_type.endswith("LC-HRMS"):
+                    mode_choices = ["ESI+", "ESI-", "ESI+/-"]
+                elif canonical_type.endswith("GC-MS"):
+                    mode_choices = ["Splitless", "Split", "Split/Splitless"]
+                else:
+                    mode_choices = [""]
+                for mode_choice in mode_choices:
+                    display_label = f"{translated_type} — {mode_choice}" if mode_choice else translated_type
+                    analysis_selection_labels.append(display_label)
+                    analysis_selection_values.append((canonical_type, mode_choice))
+
+            current_selection = next(
+                (i for i, value in enumerate(analysis_selection_values)
+                 if value == (current_analysis_type, current_analysis_mode)),
+                next((i for i, value in enumerate(analysis_selection_values)
+                      if value[0] == current_analysis_type), 0),
+            )
             selected_analysis_label = st.selectbox(
                 t("analysis_type"),
-                options=analysis_labels,
-                index=analysis_index,
+                options=analysis_selection_labels,
+                index=current_selection,
                 key="analysis_type_select",
             )
-            data["analysis_type"] = (
-                selected_analysis_label if st.session_state.language == "fr"
-                else available_analysis_types[analysis_labels.index(selected_analysis_label)]
-            )
+            selected_analysis_index = analysis_selection_labels.index(selected_analysis_label)
+            data["analysis_type"], data["analysis_mode"] = analysis_selection_values[selected_analysis_index]
+
             if data["analysis_type"].startswith("Développement de méthodes spécifiques") or data["analysis_type"].startswith("Développements spécifiques"):
                 st.text_area(
                     t("specific_development_details"),
@@ -2385,6 +2428,7 @@ def render_form():
                 (t("date"), data.get("date", "")),
                 (t("manager_email"), data.get("manager_email", "")),
                 (t("analysis_type"), data.get("analysis_type", "")),
+                (t("analysis_mode"), data.get("analysis_mode", "")),
                 (t("specific_development_details"), data.get("analysis_details", "") if (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques")) else ""),
                 (t("project_name"), data.get("project_name", "")),
                 (t("funding"), data.get("funding", "NO")),
@@ -2406,6 +2450,7 @@ def render_form():
                     "admin_email": t("project_staff_email_short"),
                     "platform_staff_email": t("platform_staff_email_short"),
                     "analysis_type": t("analysis_type"),
+                    "analysis_mode": t("analysis_mode"),
                     "analysis_details": t("specific_development_details"),
                     "project_description": t("project_description_short"),
                     "samples": t("samples_short"),
@@ -2475,6 +2520,7 @@ def render_form():
                                 "admin_email": data.get("admin_email", ""),
                                 "platform_staff_email": data.get("platform_staff_email", ""),
                                 "analysis_type": data.get("analysis_type", ""),
+                                "analysis_mode": data.get("analysis_mode", ""),
                                 "analysis_details": data.get("analysis_details", ""),
                                 "group": data.get("group", ""),
                                 "request_date": data.get("date", ""),
