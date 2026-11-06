@@ -1706,12 +1706,6 @@ def render_admin():
                 "inrae_public_price": numeric_price(row.get("Prix public INRAE" if is_fr else "INRAE public price")),
             })
             cleaned_translations.setdefault(label, ANALYSIS_TYPES_EN.get(label, label))
-        if SPECIFIC_DEVELOPMENT_TYPE not in cleaned_types:
-            cleaned_types.append(SPECIFIC_DEVELOPMENT_TYPE)
-            cleaned_catalog.append({
-                "type": SPECIFIC_DEVELOPMENT_TYPE,
-                "public_price": None, "private_price": None, "inrae_public_price": None
-            })
         save_notification_settings({
             "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
             "admin_cc_email": notification_settings.get("admin_cc_email", ""),
@@ -1759,7 +1753,7 @@ def render_admin():
                 except Exception as exc:
                     st.error(f"{t('cloud_error')} {exc}")
 
-    removable_types = [item for item in managed_types if item != SPECIFIC_DEVELOPMENT_TYPE]
+    removable_types = managed_types.copy()
     if delete_catalog_clicked and removable_types:
         st.session_state["show_delete_analysis_catalog_type"] = True
     if st.session_state.get("show_delete_analysis_catalog_type", False) and removable_types:
@@ -2126,8 +2120,6 @@ def render_form():
     except Exception:
         available_analysis_types = ANALYSIS_TYPES.copy()
         available_analysis_type_translations = ANALYSIS_TYPES_EN.copy()
-    if SPECIFIC_DEVELOPMENT_TYPE not in available_analysis_types:
-        available_analysis_types.append(SPECIFIC_DEVELOPMENT_TYPE)
     steps = t("steps")
     step = min(st.session_state.step, len(steps) - 1)
 
