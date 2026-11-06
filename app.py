@@ -413,14 +413,18 @@ def load_notification_settings():
             ]
         )),
         "analysis_type_translations": {
-            **ANALYSIS_TYPES_EN,
             **(
-                {str(k).strip(): str(v).strip()
-                 for k, v in settings.get("analysis_type_translations", {}).items()
-                 if str(k).strip() and str(v).strip()}
+                {
+                    normalize_analysis_type_name(str(k).strip()): str(v).strip()
+                    for k, v in settings.get("analysis_type_translations", {}).items()
+                    if str(k).strip() and str(v).strip()
+                }
                 if isinstance(settings.get("analysis_type_translations", {}), dict)
                 else {}
             ),
+            # Keep the reviewed English labels authoritative for the 12 predefined types,
+            # including when older French labels are still present in the Nextcloud JSON.
+            **ANALYSIS_TYPES_EN,
         },
         "analysis_catalog": (
             settings.get("analysis_catalog", [])
