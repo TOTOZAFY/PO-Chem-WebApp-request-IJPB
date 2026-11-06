@@ -2620,36 +2620,54 @@ def render_form():
             # One request can contain several analyses, each with its own sample count and mode.
             analysis_items = data.setdefault("analysis_items", [])
             if not analysis_items:
+                # Keep compatibility with an already populated legacy single-analysis form,
+                # but start a genuinely new request with empty fields.
+                legacy_type = data.get("analysis_type", "")
                 analysis_items.append({
-                    "analysis_type": data.get("analysis_type", available_analysis_types[0]),
-                    "analysis_mode": data.get("analysis_mode", ""),
-                    "sample_count": int(data.get("sample_count", 1) or 1),
+                    "analysis_type": legacy_type,
+                    "analysis_mode": data.get("analysis_mode", "") if legacy_type else "",
+                    "sample_count": data.get("sample_count") if legacy_type else None,
                     "analysis_details": data.get("analysis_details", ""),
                 })
             st.markdown(f"**{t('analysis_type')}**")
             for analysis_index, analysis_item in enumerate(analysis_items):
-                current = analysis_item.get("analysis_type", available_analysis_types[0])
-                summary_type = current if st.session_state.language == "fr" else available_analysis_type_translations.get(current, ANALYSIS_TYPES_EN.get(current, current))
-                summary_samples = max(1, int(analysis_item.get("sample_count", 1) or 1))
-                expander_label = (f"Analyse {analysis_index + 1} · {summary_type} · {summary_samples} échantillon(s)" if st.session_state.language == "fr" else f"Analysis {analysis_index + 1} · {summary_type} · {summary_samples} sample(s)")
+                current = analysis_item.get("analysis_type", "") or ""
+                summary_type = (current if st.session_state.language == "fr" else available_analysis_type_translations.get(current, ANALYSIS_TYPES_EN.get(current, current))) if current else ("À renseigner" if st.session_state.language == "fr" else "To be completed")
+                raw_samples = analysis_item.get("sample_count")
+                summary_samples = f"{raw_samples} échantillon(s)" if raw_samples not in (None, "") else "nombre à renseigner" if st.session_state.language == "fr" else "sample count to be entered"
+                expander_label = (f"Analyse {analysis_index + 1} · {summary_type} · {summary_samples}" if st.session_state.language == "fr" else f"Analysis {analysis_index + 1} · {summary_type} · {summary_samples}")
                 with st.expander(expander_label, expanded=False):
                     labels, values = [], []
                     for canonical_type in available_analysis_types:
                         translated = canonical_type if st.session_state.language == "fr" else available_analysis_type_translations.get(canonical_type, ANALYSIS_TYPES_EN.get(canonical_type, canonical_type))
                         labels.append(translated); values.append(canonical_type)
-                    idx = values.index(current) if current in values else 0
-                    selected_label = st.selectbox(t("analysis_type"), labels, index=idx, key=f"analysis_type_{analysis_index}")
-                    analysis_item["analysis_type"] = values[labels.index(selected_label)]
-                    atype = analysis_item["analysis_type"]
+                    current_index = values.index(current) if current in values else None
+                    selected_label = st.selectbox(
+                        t("analysis_type"), labels, index=current_index,
+                        placeholder="Sélectionner un type d’analyse" if st.session_state.language == "fr" else "Select an analysis type",
+                        key=f"analysis_type_{analysis_index}"
+                    )
+                    selected_type = values[labels.index(selected_label)] if selected_label else ""
+                    analysis_item["analysis_type"] = selected_type
+                    atype = selected_type
                     modes = ["ESI+", "ESI-", "ESI+/-"] if atype.endswith("LC-HRMS") else (["Splitless", "Split", "Split/Splitless"] if atype.endswith("GC-MS") else [])
                     if modes:
                         previous = analysis_item.get("analysis_mode")
-                        if previous not in modes: previous = modes[0]
+                        mode_index = modes.index(previous) if previous in modes else None
                         mode_label = t("analysis_mode_lchrms") if atype.endswith("LC-HRMS") else t("analysis_mode_gc_ms")
-                        analysis_item["analysis_mode"] = st.selectbox(mode_label, modes, index=modes.index(previous), key=f"analysis_mode_{analysis_index}")
+                        analysis_item["analysis_mode"] = st.selectbox(
+                            mode_label, modes, index=mode_index,
+                            placeholder="Sélectionner un mode" if st.session_state.language == "fr" else "Select a mode",
+                            key=f"analysis_mode_{analysis_index}"
+                        ) or ""
                     else:
                         analysis_item["analysis_mode"] = ""
-                    analysis_item["sample_count"] = st.number_input(t("sample_count"), min_value=1, max_value=1000000, value=max(1, int(analysis_item.get("sample_count", 1) or 1)), step=1, key=f"analysis_samples_{analysis_index}")
+                    previous_count = analysis_item.get("sample_count")
+                    analysis_item["sample_count"] = st.number_input(
+                        t("sample_count"), min_value=1, max_value=1000000,
+                        value=int(previous_count) if previous_count not in (None, "") else None,
+                        step=1, key=f"analysis_samples_{analysis_index}"
+                    )
                     if atype.startswith(("Développement de méthodes spécifiques", "Développements spécifiques")):
                         analysis_item["analysis_details"] = st.text_area(t("specific_development_details"), value=analysis_item.get("analysis_details", ""), height=100, key=f"analysis_details_{analysis_index}")
                     else:
@@ -2657,13 +2675,13 @@ def render_form():
                     if len(analysis_items) > 1 and st.button(("Supprimer cette analyse" if st.session_state.language == "fr" else "Remove this analysis"), key=f"remove_analysis_{analysis_index}"):
                         analysis_items.pop(analysis_index); st.rerun()
             if st.button(("＋ Ajouter un autre type d’analyse" if st.session_state.language == "fr" else "＋ Add another analysis type"), key="add_analysis_item"):
-                analysis_items.append({"analysis_type": available_analysis_types[0], "analysis_mode": "", "sample_count": 1, "analysis_details": ""})
+                analysis_items.append({"analysis_type": "", "analysis_mode": "", "sample_count": None, "analysis_details": ""})
                 st.rerun()
             data["analysis_items"] = analysis_items
             data["analysis_type"] = analysis_items[0].get("analysis_type", "")
             data["analysis_mode"] = analysis_items[0].get("analysis_mode", "")
             data["analysis_details"] = analysis_items[0].get("analysis_details", "")
-            data["sample_count"] = sum(int(x.get("sample_count", 1) or 1) for x in analysis_items)
+            data["sample_count"] = sum(int(x.get("sample_count") or 0) for x in analysis_items)
             text_field("platform_staff_email", t("platform_staff_email"))
             st.caption(t("recommended"))
         elif step == 1:
