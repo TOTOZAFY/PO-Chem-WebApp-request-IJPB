@@ -2628,13 +2628,15 @@ def render_form():
                 })
             st.markdown(f"**{t('analysis_type')}**")
             for analysis_index, analysis_item in enumerate(analysis_items):
-                with st.container(border=True):
-                    st.markdown((f"**Analyse {analysis_index + 1}**" if st.session_state.language == "fr" else f"**Analysis {analysis_index + 1}**"))
+                current = analysis_item.get("analysis_type", available_analysis_types[0])
+                summary_type = current if st.session_state.language == "fr" else available_analysis_type_translations.get(current, ANALYSIS_TYPES_EN.get(current, current))
+                summary_samples = max(1, int(analysis_item.get("sample_count", 1) or 1))
+                expander_label = (f"Analyse {analysis_index + 1} · {summary_type} · {summary_samples} échantillon(s)" if st.session_state.language == "fr" else f"Analysis {analysis_index + 1} · {summary_type} · {summary_samples} sample(s)")
+                with st.expander(expander_label, expanded=False):
                     labels, values = [], []
                     for canonical_type in available_analysis_types:
                         translated = canonical_type if st.session_state.language == "fr" else available_analysis_type_translations.get(canonical_type, ANALYSIS_TYPES_EN.get(canonical_type, canonical_type))
                         labels.append(translated); values.append(canonical_type)
-                    current = analysis_item.get("analysis_type")
                     idx = values.index(current) if current in values else 0
                     selected_label = st.selectbox(t("analysis_type"), labels, index=idx, key=f"analysis_type_{analysis_index}")
                     analysis_item["analysis_type"] = values[labels.index(selected_label)]
