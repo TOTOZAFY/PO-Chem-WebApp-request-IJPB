@@ -778,6 +778,38 @@ def save_fair_workbook(record, workbook):
     record["fair_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
 
 
+
+def fair_sheet_completion_status(record):
+    """Return per-sheet indicators for user-entered changes vs the FAIR template."""
+    if not os.path.isfile(FAIR_TEMPLATE_PATH):
+        raise FileNotFoundError("FAIR_template.xlsx is missing")
+    template_wb = load_workbook(FAIR_TEMPLATE_PATH, data_only=False)
+    fair_wb = load_fair_workbook(record)
+    statuses = {}
+    for sheet_name in ("Sample", "Analysis", "Data treatment", "Pipeline Step by Step"):
+        if sheet_name not in fair_wb.sheetnames or sheet_name not in template_wb.sheetnames:
+            statuses[sheet_name] = False
+            continue
+        ws = fair_wb[sheet_name]
+        template_ws = template_wb[sheet_name]
+        changed = False
+        max_row = max(ws.max_row, template_ws.max_row)
+        max_col = max(ws.max_column, template_ws.max_column)
+        for row in range(1, max_row + 1):
+            for col in range(1, max_col + 1):
+                if sheet_name == "Sample" and (row, col) in {(1, 2), (2, 2), (3, 2), (4, 2)}:
+                    continue
+                current = ws.cell(row, col).value
+                original = template_ws.cell(row, col).value
+                if current != original and current not in (None, ""):
+                    changed = True
+                    break
+            if changed:
+                break
+        statuses[sheet_name] = changed
+    return statuses
+
+
 def sample_rows(ws):
     return {str(ws.cell(r, 1).value).strip(): r for r in range(1, ws.max_row + 1)
             if ws.cell(r, 1).value is not None and str(ws.cell(r, 1).value).strip()}
@@ -2025,6 +2057,38 @@ def render_admin():
                 details_label = "Détails du développement spécifique" if st.session_state.language == "fr" else "Specific development details"
                 st.write(f"**{details_label} :** {record.get('analysis_details')}")
             st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
+            request_status = record.get("status", "pending")
+            request_status_labels = {
+                "pending": t("status_pending"),
+                "accepted": t("status_accepted"),
+                "refused": t("status_refused"),
+            }
+            status_label = "Statut de la demande" if st.session_state.language == "fr" else "Request status"
+            st.write(f"**{status_label} :** {request_status_labels.get(request_status, request_status or '—')}")
+            quotation_imported = bool(record.get("signed_quote_path"))
+            quotation_label = "Devis importé" if st.session_state.language == "fr" else "Quotation uploaded"
+            quotation_value = ("Oui" if st.session_state.language == "fr" else "Yes") if quotation_imported else ("Non" if st.session_state.language == "fr" else "No")
+            st.write(f"**{quotation_label} :** {quotation_value}")
+
+            fair_status_heading = "État des feuilles FAIR" if st.session_state.language == "fr" else "FAIR sheet completion"
+            st.markdown(f"**{fair_status_heading}**")
+            try:
+                sheet_statuses = fair_sheet_completion_status(record)
+                sheet_names_fr = {
+                    "Sample": "Sample",
+                    "Analysis": "Analysis",
+                    "Data treatment": "Data treatment",
+                    "Pipeline Step by Step": "Pipeline Step by Step",
+                }
+                for sheet_name, has_content in sheet_statuses.items():
+                    sheet_label = sheet_names_fr[sheet_name]
+                    if st.session_state.language == "fr":
+                        state_text = "Données saisies" if has_content else "Non renseignée"
+                    else:
+                        state_text = "Data entered" if has_content else "Not completed"
+                    st.write(f"- **{sheet_label} :** {state_text}")
+            except Exception as fair_status_error:
+                st.caption(("État des feuilles FAIR indisponible : " if st.session_state.language == "fr" else "FAIR sheet status unavailable: ") + str(fair_status_error))
 
             st.subheader("FAIR – Sample")
             fair_path = record.get("fair_path") or fair_remote_path(record)
