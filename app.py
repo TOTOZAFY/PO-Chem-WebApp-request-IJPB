@@ -67,6 +67,10 @@ TRANSLATIONS = {
         "steps": ["Contacts", "Description du projet", "Échantillons", "Résultats & bibliographie",
                   "Informations complémentaires", "Vérification & soumission"],
         "general": "1. Informations générales", "requester_section": "Demandeur", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Responsable du projet *", "manager_last_name": "Nom *", "manager_first_name": "Prénom *",
+        "visibility": "Type de laboratoire *",
+        "visibility_private": "Privée",
+        "visibility_public": "Public",
+        "visibility_ijpb": "Public (IJPB)",
         "group": "Groupe / laboratoire *", "date": "Date", "phone": "Téléphone",
         "manager_email": "E-mail du responsable *", "admin_staff": "Personnel administratif",
         "admin_phone": "Téléphone du personnel administratif", "admin_email": "E-mail du personnel administratif (facultatif)",
@@ -178,6 +182,10 @@ TRANSLATIONS = {
         "steps": ["Contacts", "Project description", "Samples", "Preliminary results & bibliography",
                   "Additional information", "Review & submission"],
         "general": "1. General information", "requester_section": "Requester", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Project manager *", "manager_last_name": "Last name *", "manager_first_name": "First name *",
+        "visibility": "Laboratory type *",
+        "visibility_private": "Private",
+        "visibility_public": "Public",
+        "visibility_ijpb": "Public (IJPB)",
         "group": "Group / laboratory *", "date": "Date", "phone": "Telephone",
         "manager_email": "Project manager email *", "admin_staff": "Administrative staff",
         "admin_phone": "Administrative staff telephone", "admin_email": "Administrative staff email (optional)",
@@ -529,7 +537,18 @@ def build_document(form_data):
     if len(doc.tables) < 2:
         raise ValueError("Le modèle Word ne contient pas le tableau de formulaire attendu.")
     table = doc.tables[1]
-    add_to_existing_paragraph(table.cell(0, 0).paragraphs[0], " ".join(part for part in (form_data.get("project_manager", ""), form_data.get("project_manager_first_name", "")) if part))
+    manager_cell = table.cell(0, 0)
+    manager_cell.paragraphs[0].clear()
+    manager_last = str(form_data.get("project_manager", "") or "").strip()
+    manager_first = str(form_data.get("project_manager_first_name", "") or "").strip()
+    manager_label = "Nom" if st.session_state.get("language", "fr") == "fr" else "Last name"
+    first_label = "Prénom" if st.session_state.get("language", "fr") == "fr" else "First name"
+    manager_p = manager_cell.paragraphs[0]
+    manager_p.add_run(f"{manager_label} : ").bold = True
+    manager_p.add_run(manager_last)
+    first_p = manager_cell.add_paragraph()
+    first_p.add_run(f"{first_label} : ").bold = True
+    first_p.add_run(manager_first)
     add_to_existing_paragraph(table.cell(0, 2).paragraphs[0], form_data.get("group"))
     add_to_existing_paragraph(table.cell(1, 0).paragraphs[0], form_data.get("date"))
     add_to_existing_paragraph(table.cell(1, 1).paragraphs[0], form_data.get("manager_phone"))
@@ -596,6 +615,15 @@ def build_document(form_data):
         add_value(results_cell, t("bibliography_prefix") + " " + bibliography)
 
     project_cell = table.cell(6, 0)
+    visibility = form_data.get("visibility", "Public (IJPB)").strip()
+    if visibility:
+        visibility_paragraph = project_cell.add_paragraph()
+        visibility_run = visibility_paragraph.add_run(
+            ("Type de laboratoire : " if st.session_state.get("language", "fr") == "fr" else "Laboratory type: ")
+            + visibility
+        )
+        visibility_run.bold = True
+        visibility_run.font.size = Pt(9)
     add_to_existing_paragraph(project_cell.paragraphs[0], form_data.get("project_name"), bold=True)
     add_to_existing_paragraph(project_cell.paragraphs[1], f"{t('answer_prefix')} {form_data.get('funding', 'NO')}", bold=True)
     guidance_cell = table.cell(7, 0)
@@ -2046,6 +2074,19 @@ def render_form():
                 data["date"] = selected_date.isoformat()
                 text_field("manager_phone", t("phone"))
                 text_field("manager_email", t("manager_email"))
+                visibility_values = ["Privée", "Public", "Public (IJPB)"]
+                visibility_labels = [
+                    t("visibility_private"), t("visibility_public"), t("visibility_ijpb")
+                ]
+                saved_visibility = data.get("visibility", "Public (IJPB)")
+                visibility_index = visibility_values.index(saved_visibility) if saved_visibility in visibility_values else 0
+                selected_visibility = st.radio(
+                    t("visibility"),
+                    options=visibility_labels,
+                    index=visibility_index,
+                    key="request_visibility",
+                )
+                data["visibility"] = visibility_values[visibility_labels.index(selected_visibility)]
             with requester_right:
                 text_field("admin_staff", t("admin_staff"))
                 text_field("admin_phone", t("admin_phone"))
@@ -2125,6 +2166,7 @@ def render_form():
             st.subheader(t("review"))
             summary = [
                 (t("manager"), " ".join(part for part in (data.get("project_manager", ""), data.get("project_manager_first_name", "")) if part)),
+                (t("visibility"), data.get("visibility", "Public (IJPB)")),
                 (t("sample_count"), str(data.get("sample_count", ""))),
                 (t("group"), data.get("group", "")),
                 (t("date"), data.get("date", "")),
@@ -2139,7 +2181,9 @@ def render_form():
                 st.markdown(f"**{label} :** {value or '—'}")
             with st.expander(t("all_answers")):
                 answer_labels = {
-                    "project_manager": t("project_manager_short"),
+                    "project_manager": t("manager_last_name"),
+                    "project_manager_first_name": t("manager_first_name"),
+                    "visibility": t("visibility"),
                     "group": t("project_group_short"),
                     "date": t("project_date_short"),
                     "manager_phone": t("phone"),
@@ -2209,6 +2253,7 @@ def render_form():
                             record = {
                                 "id": request_id,
                                 "project_name": data.get("project_name", ""),
+                                "visibility": data.get("visibility", "Public (IJPB)"),
                                 "project_manager": data.get("project_manager", "").strip(),
                                 "project_manager_first_name": data.get("project_manager_first_name", "").strip(),
                                 "manager_email": data.get("manager_email", ""),
