@@ -132,7 +132,7 @@ TRANSLATIONS = {
         "platform_contact_email": "E-mail de contact de la plateforme",
         "platform_contact_help": "Cette adresse reçoit les nouvelles demandes. Elle est modifiable dans l'espace de gestion de la plateforme.",
         "platform_contact_caption": "Adresse de notification de la plateforme — affichée ici à titre informatif.",
-        "analysis_type": "Type d’analyse et mode analytique *", "analysis_type_stats": "Demandes par type d’analyse",
+        "analysis_type": "Type d’analyse *", "analysis_type_stats": "Demandes par type d’analyse",
         "analysis_mode": "Mode d’ionisation / d’injection",
         "analysis_mode_lchrms": "Mode d’ionisation (ESI)",
         "analysis_mode_gc_ms": "Mode d’injection",
@@ -250,7 +250,7 @@ TRANSLATIONS = {
         "platform_contact_email": "Platform contact email",
         "platform_contact_help": "This address receives new requests. It can be changed in the platform management area.",
         "platform_contact_caption": "Platform notification address — displayed here for information.",
-        "analysis_type": "Analysis type and analytical mode *", "analysis_type_stats": "Requests by analysis type",
+        "analysis_type": "Analysis type *", "analysis_type_stats": "Requests by analysis type",
         "analysis_mode": "Ionization / injection mode",
         "analysis_mode_lchrms": "Ionization mode (ESI)",
         "analysis_mode_gc_ms": "Injection mode",
@@ -2340,12 +2340,11 @@ def render_form():
             st.caption(
                 t("platform_contact_caption")
             )
-            # The first Platform field combines the analysis type and, when relevant,
-            # its acquisition mode. This keeps ESI/Split choices inside the same field.
+            # Keep the analysis-type list intact and display the acquisition mode
+            # in a separate field only when the selected method requires it.
             current_analysis_type = data.get("analysis_type", available_analysis_types[0])
-            current_analysis_mode = data.get("analysis_mode", "")
-            analysis_selection_labels = []
-            analysis_selection_values = []
+            analysis_type_labels = []
+            analysis_type_values = []
             for canonical_type in available_analysis_types:
                 translated_type = (
                     canonical_type if st.session_state.language == "fr"
@@ -2353,31 +2352,45 @@ def render_form():
                         canonical_type, ANALYSIS_TYPES_EN.get(canonical_type, canonical_type)
                     )
                 )
-                if canonical_type.endswith("LC-HRMS"):
-                    mode_choices = ["ESI+", "ESI-", "ESI+/-"]
-                elif canonical_type.endswith("GC-MS"):
-                    mode_choices = ["Splitless", "Split", "Split/Splitless"]
-                else:
-                    mode_choices = [""]
-                for mode_choice in mode_choices:
-                    display_label = f"{translated_type} — {mode_choice}" if mode_choice else translated_type
-                    analysis_selection_labels.append(display_label)
-                    analysis_selection_values.append((canonical_type, mode_choice))
+                analysis_type_labels.append(translated_type)
+                analysis_type_values.append(canonical_type)
 
-            current_selection = next(
-                (i for i, value in enumerate(analysis_selection_values)
-                 if value == (current_analysis_type, current_analysis_mode)),
-                next((i for i, value in enumerate(analysis_selection_values)
-                      if value[0] == current_analysis_type), 0),
+            current_type_index = (
+                analysis_type_values.index(current_analysis_type)
+                if current_analysis_type in analysis_type_values else 0
             )
             selected_analysis_label = st.selectbox(
                 t("analysis_type"),
-                options=analysis_selection_labels,
-                index=current_selection,
+                options=analysis_type_labels,
+                index=current_type_index,
                 key="analysis_type_select",
             )
-            selected_analysis_index = analysis_selection_labels.index(selected_analysis_label)
-            data["analysis_type"], data["analysis_mode"] = analysis_selection_values[selected_analysis_index]
+            selected_type_index = analysis_type_labels.index(selected_analysis_label)
+            data["analysis_type"] = analysis_type_values[selected_type_index]
+
+            if data["analysis_type"].endswith("LC-HRMS"):
+                mode_choices = ["ESI+", "ESI-", "ESI+/-"]
+                mode_label = t("analysis_mode_lchrms")
+            elif data["analysis_type"].endswith("GC-MS"):
+                mode_choices = ["Splitless", "Split", "Split/Splitless"]
+                mode_label = t("analysis_mode_gc_ms")
+            else:
+                mode_choices = []
+                mode_label = ""
+
+            if mode_choices:
+                previous_mode = data.get("analysis_mode", "")
+                if previous_mode not in mode_choices:
+                    previous_mode = mode_choices[0]
+                mode_index = mode_choices.index(previous_mode)
+                data["analysis_mode"] = st.selectbox(
+                    mode_label,
+                    options=mode_choices,
+                    index=mode_index,
+                    key="analysis_mode_select",
+                )
+            else:
+                data["analysis_mode"] = ""
 
             if data["analysis_type"].startswith("Développement de méthodes spécifiques") or data["analysis_type"].startswith("Développements spécifiques"):
                 st.text_area(
