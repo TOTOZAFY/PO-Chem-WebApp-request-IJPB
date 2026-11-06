@@ -76,6 +76,7 @@ TRANSLATIONS = {
         "samples_title": "3. Nature et nombre des échantillons",
         "samples_help": "Indiquez notamment les références du procédé analytique, les solvants et les formules chimiques si disponibles.",
         "samples_field": "Nature et nombre des échantillons / informations analytiques",
+        "sample_count": "Nombre d’échantillons *",
         "results_title": "4. Résultats préliminaires et bibliographie",
         "preliminary": "Résultats déjà obtenus et éléments utiles à l'évaluation du projet",
         "bibliography": "Résumé bibliographique et références des articles pertinents",
@@ -186,6 +187,7 @@ TRANSLATIONS = {
         "samples_title": "3. Nature and number of samples",
         "samples_help": "Please include analytical process references, solvents and chemical formulas if available.",
         "samples_field": "Nature and number of samples / analytical information",
+        "sample_count": "Number of samples *",
         "results_title": "4. Preliminary results and bibliography",
         "preliminary": "Results already obtained and information useful for project assessment",
         "bibliography": "Bibliography summary and references to relevant papers",
@@ -549,6 +551,16 @@ def build_document(form_data):
     # Record the selected analysis type directly in the Word section
     # "Nature et nombre des échantillons", before the sample description.
     samples_cell = table.cell(4, 0)
+    sample_count = form_data.get("sample_count", "")
+    if sample_count not in ("", None):
+        count_paragraph = samples_cell.add_paragraph()
+        count_paragraph.paragraph_format.space_after = Pt(4)
+        count_run = count_paragraph.add_run(
+            ("Nombre d’échantillons : " if st.session_state.get("language", "fr") == "fr" else "Number of samples: ")
+            + str(sample_count)
+        )
+        count_run.bold = True
+        count_run.font.size = Pt(9)
     analysis_type = form_data.get("analysis_type", "").strip()
     if analysis_type:
         type_paragraph = samples_cell.add_paragraph()
@@ -2090,6 +2102,11 @@ def render_form():
         elif step == 2:
             st.subheader(t("samples_title"))
             st.caption(t("samples_help"))
+            data["sample_count"] = st.number_input(
+                t("sample_count"), min_value=1, max_value=1000000,
+                value=int(data.get("sample_count", 1) or 1), step=1, format="%d",
+                key="sample_count_input",
+            )
             text_area("samples", t("samples_field"), 220)
         elif step == 3:
             st.subheader(t("results_title"))
@@ -2108,6 +2125,7 @@ def render_form():
             st.subheader(t("review"))
             summary = [
                 (t("manager"), " ".join(part for part in (data.get("project_manager", ""), data.get("project_manager_first_name", "")) if part)),
+                (t("sample_count"), str(data.get("sample_count", ""))),
                 (t("group"), data.get("group", "")),
                 (t("date"), data.get("date", "")),
                 (t("manager_email"), data.get("manager_email", "")),
@@ -2134,6 +2152,7 @@ def render_form():
                     "analysis_details": t("specific_development_details"),
                     "project_description": t("project_description_short"),
                     "samples": t("samples_short"),
+                    "sample_count": t("sample_count"),
                     "preliminary": t("preliminary_short"),
                     "bibliography": t("bibliography_short"),
                     "project_name": t("project_name_short"),
