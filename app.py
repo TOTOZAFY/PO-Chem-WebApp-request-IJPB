@@ -2304,7 +2304,9 @@ def render_admin():
                                     f"Type d'analyse : {analysis_type}\n"
                                     f"{mode_label_fr} : {mode_value_fr}\n"
                                     f"Type de laboratoire : {visibility}\n"
-                                    f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n\n"
+                                    f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n"
+                                    f"{quote_followup_fr}\n"
+                                    f"{disclaimer_fr}\n\n"
                                     f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\n\n"
                                     "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
                                 )
@@ -2317,7 +2319,9 @@ def render_admin():
                                     f"Analysis type: {analysis_type}\n"
                                     f"{mode_label_en}: {mode_value_en}\n"
                                     f"Laboratory type: {visibility}\n"
-                                    f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n\n"
+                                    f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n"
+                                    f"{quote_followup_en}\n"
+                                    f"{disclaimer_en}\n\n"
                                     f"Comment: {comment.strip() or 'No comment.'}\n\n"
                                     "Best regards,\nOV-Chimie-Metabolisme Platform"
                                 )
@@ -2328,8 +2332,15 @@ def render_admin():
                                 status=status_display[status_options.index(new_status)],
                                 comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
                             )
+                        mail_subject = (
+                            f"Demande d'analyse acceptée – Réf. {record.get('id', '')}"
+                            if new_status == "accepted" and st.session_state.language == "fr"
+                            else f"Analysis request accepted – Ref. {record.get('id', '')}"
+                            if new_status == "accepted"
+                            else t("mail_user_subject")
+                        )
                         send_email(
-                            email, t("mail_user_subject"), body,
+                            email, mail_subject, body,
                             cc=join_email_recipients(*cc_addresses),
                         )
                         st.success(t("decision_saved"))
