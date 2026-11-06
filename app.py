@@ -1980,11 +1980,22 @@ def render_admin():
         if isinstance(item, dict) and str(item.get("type", "")).strip()
     }
     # Keep stored laboratory categories unchanged for compatibility with existing requests.
-    revenue_categories = ("Privée", "Public", "Public (IJPB)")
+    # IJPB revenue is split according to the request's funding checkbox.
+    revenue_categories = (
+        "Privée",
+        "Public",
+        "Public (IJPB) - funded",
+        "Public (IJPB) - not funded",
+    )
     revenue_labels = {
         "Privée": "Privée" if is_fr else "Private",
         "Public": "Publique" if is_fr else "Public",
-        "Public (IJPB)": "Publique (IJPB)" if is_fr else "Public (IJPB)",
+        "Public (IJPB) - funded": (
+            "Publique (IJPB) — projet financé" if is_fr else "Public (IJPB) — funded project"
+        ),
+        "Public (IJPB) - not funded": (
+            "Publique (IJPB) — projet non financé" if is_fr else "Public (IJPB) — non-funded project"
+        ),
     }
     annual_revenue = {}
     annual_request_counts = {}
@@ -2018,8 +2029,16 @@ def render_admin():
         if unit_price is None:
             missing_price_count += 1
             continue
+        revenue_category = lab_type
+        if lab_type == "Public (IJPB)":
+            funding_value = str(item.get("funding", "NO") or "NO").strip().upper()
+            is_funded = funding_value in ("YES", "OUI", "TRUE", "1")
+            revenue_category = (
+                "Public (IJPB) - funded" if is_funded
+                else "Public (IJPB) - not funded"
+            )
         year_totals = annual_revenue.setdefault(year, {category: 0.0 for category in revenue_categories})
-        year_totals[lab_type] += unit_price * sample_count * multiplier
+        year_totals[revenue_category] += unit_price * sample_count * multiplier
         annual_request_counts[year] = annual_request_counts.get(year, 0) + 1
 
     if annual_revenue:
@@ -2041,7 +2060,7 @@ def render_admin():
             category: sum(amounts[category] for amounts in annual_revenue.values())
             for category in revenue_categories
         }
-        category_metrics = st.columns(3)
+        category_metrics = st.columns(4)
         for column, category in zip(category_metrics, revenue_categories):
             column.metric(
                 revenue_labels[category],
