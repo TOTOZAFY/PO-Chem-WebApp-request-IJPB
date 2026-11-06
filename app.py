@@ -1963,6 +1963,80 @@ def render_admin():
     active_records = [r for r in records if not r.get("archived", False)]
     archived_records = [r for r in records if r.get("archived", False)]
 
+    st.subheader("Recettes annuelles indicatives" if st.session_state.language == "fr" else "Indicative annual revenue")
+    st.warning(
+        "⚠️ ESTIMATION INDICATIVE UNIQUEMENT — Les montants sont calculés à partir du catalogue tarifaire actuel. Ils ne représentent pas nécessairement les sommes réellement facturées ou encaissées."
+        if st.session_state.language == "fr" else
+        "⚠️ INDICATIVE ESTIMATE ONLY — Amounts are calculated using the current price catalog. They do not necessarily represent amounts actually invoiced or received."
+    )
+    st.caption(
+        "Cumul de toutes les demandes acceptées, actives et archivées."
+        if st.session_state.language == "fr" else
+        "Total of all accepted requests, active and archived."
+    )
+    catalog_prices = {
+        normalize_analysis_type_name(item.get("type", "")): item
+        for item in notification_settings.get("analysis_catalog", [])
+        if isinstance(item, dict) and str(item.get("type", "")).strip()
+    }
+    annual_revenue = {}
+    annual_request_counts = {}
+    missing_price_count = 0
+    for item in records:
+        if item.get("deleted", False) or item.get("status") != "accepted":
+            continue
+        decision_date = str(item.get("decision_at", "") or item.get("submitted_at", ""))
+        year = decision_date[:4]
+        if not year.isdigit():
+            continue
+        analysis_type_key = normalize_analysis_type_name(str(item.get("analysis_type", "")))
+        price_record = catalog_prices.get(analysis_type_key, {})
+        lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
+        price_key = {
+            "Privée": "private_price",
+            "Public": "public_price",
+            "Public (IJPB)": "inrae_public_price",
+        }.get(lab_type)
+        unit_price = price_record.get(price_key) if price_key else None
+        try:
+            unit_price = float(str(unit_price).replace(",", ".")) if unit_price not in (None, "") else None
+            sample_count = max(1, int(item.get("sample_count", 1) or 1))
+        except (TypeError, ValueError):
+            unit_price = None
+            sample_count = 1
+        analysis_mode_value = str(item.get("analysis_mode", "") or "")
+        multiplier = 2 if analysis_mode_value in ("Split/Splitless", "ESI+/-") else 1
+        if unit_price is None:
+            missing_price_count += 1
+            continue
+        annual_revenue[year] = annual_revenue.get(year, 0.0) + unit_price * sample_count * multiplier
+        annual_request_counts[year] = annual_request_counts.get(year, 0) + 1
+
+    if annual_revenue:
+        import pandas as pd
+        revenue_frame = pd.DataFrame(
+            [{"Année" if st.session_state.language == "fr" else "Year": year,
+              "Recettes indicatives (€)" if st.session_state.language == "fr" else "Indicative revenue (€)": round(amount, 2)}
+             for year, amount in sorted(annual_revenue.items())]
+        )
+        st.bar_chart(revenue_frame.set_index("Année" if st.session_state.language == "fr" else "Year"))
+        st.dataframe(revenue_frame, use_container_width=True, hide_index=True)
+        total_estimated = sum(annual_revenue.values())
+        st.metric(
+            "Total indicatif cumulé" if st.session_state.language == "fr" else "Cumulative indicative total",
+            f"{total_estimated:,.2f} €".replace(",", " ")
+        )
+        count_label = "Demandes acceptées comptabilisées" if st.session_state.language == "fr" else "Accepted requests included"
+        st.caption(f"{count_label} : {sum(annual_request_counts.values())}")
+    else:
+        st.info("Aucune demande acceptée avec un tarif renseigné et une année d'acceptation identifiable." if st.session_state.language == "fr" else "No accepted requests with a catalog price and identifiable acceptance year.")
+    if missing_price_count:
+        st.warning(
+            f"{missing_price_count} demande(s) acceptée(s) exclue(s) du calcul car aucun tarif correspondant n'est renseigné."
+            if st.session_state.language == "fr" else
+            f"{missing_price_count} accepted request(s) excluded because no matching catalog price is configured."
+        )
+
     active_tab, archive_tab = st.tabs([
         "📋 Demandes actives" if st.session_state.language == "fr" else "📋 Active requests",
         "🗄️ Archives" if st.session_state.language == "fr" else "🗄️ Archive",
