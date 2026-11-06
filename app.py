@@ -113,6 +113,7 @@ TRANSLATIONS = {
         "admin_primary_email": "E-mail principal de l’administrateur",
         "platform_staff_email": "E-mail du personnel de la plateforme (facultatif)",
         "admin_secondary_email": "E-mail secondaire de l’administrateur (CC, facultatif)",
+        "ijpb_admin_email": "E-mail du personnel administratif de l’IJPB (CC, facultatif)",
         "save_notification_settings": "Enregistrer les adresses e-mail",
         "notification_settings_saved": "Adresses de notification enregistrées dans Nextcloud.",
         "select_request": "Sélectionner une demande", "status": "Décision / statut",
@@ -231,6 +232,7 @@ TRANSLATIONS = {
         "admin_primary_email": "Administrator primary email",
         "platform_staff_email": "Platform staff email (optional)",
         "admin_secondary_email": "Administrator secondary email (CC, optional)",
+        "ijpb_admin_email": "IJPB administrative staff email (CC, optional)",
         "save_notification_settings": "Save email addresses",
         "notification_settings_saved": "Notification addresses saved to Nextcloud.",
         "select_request": "Select a request", "status": "Decision / status",
@@ -397,6 +399,7 @@ def load_notification_settings():
         return {
             "admin_email": DEFAULT_ADMIN_EMAIL,
             "admin_cc_email": "",
+            "ijpb_admin_email": "",
             "analysis_types": ANALYSIS_TYPES.copy(),
             "analysis_type_translations": ANALYSIS_TYPES_EN.copy(),
         }
@@ -407,6 +410,7 @@ def load_notification_settings():
     return {
         "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
         "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
+        "ijpb_admin_email": str(settings.get("ijpb_admin_email", "")).strip(),
         "analysis_types": list(dict.fromkeys(
             ANALYSIS_TYPES + [
                 normalize_analysis_type_name(x)
@@ -1639,6 +1643,10 @@ def render_admin():
             t("admin_secondary_email"),
             value=notification_settings.get("admin_cc_email", ""),
         )
+        ijpb_admin_email = st.text_input(
+            t("ijpb_admin_email"),
+            value=notification_settings.get("ijpb_admin_email", ""),
+        )
         save_recipients = st.form_submit_button(t("save_notification_settings"))
     if save_recipients:
         if not admin_primary.strip():
@@ -1648,6 +1656,7 @@ def render_admin():
                 save_notification_settings({
                     "admin_email": admin_primary.strip(),
                     "admin_cc_email": admin_secondary.strip(),
+                    "ijpb_admin_email": ijpb_admin_email.strip(),
                     "analysis_types": notification_settings.get("analysis_types", ANALYSIS_TYPES),
                     "analysis_type_translations": notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN),
                     "analysis_catalog": notification_settings.get("analysis_catalog", []),
@@ -1784,6 +1793,7 @@ def render_admin():
         save_notification_settings({
             "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
             "admin_cc_email": notification_settings.get("admin_cc_email", ""),
+            "ijpb_admin_email": notification_settings.get("ijpb_admin_email", ""),
             "analysis_types": cleaned_types,
             "analysis_type_translations": cleaned_translations,
             "analysis_catalog": cleaned_catalog,
@@ -2563,6 +2573,7 @@ def render_form():
                                 admin_email = recipients.get("admin_email") or DEFAULT_ADMIN_EMAIL
                                 internal_cc = join_email_recipients(
                                     recipients.get("admin_cc_email"),
+                                    recipients.get("ijpb_admin_email", ""),
                                     record.get("admin_email", ""),
                                     record.get("platform_staff_email", ""),
                                 )
