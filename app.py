@@ -75,8 +75,8 @@ TRANSLATIONS = {
         "general": "1. Informations générales", "requester_section": "Demandeur", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Responsable du projet *", "manager_last_name": "Nom *", "manager_first_name": "Prénom *",
         "visibility": "Type de laboratoire *",
         "visibility_private": "Privée",
-        "visibility_public": "Public",
-        "visibility_ijpb": "Public (IJPB)",
+        "visibility_public": "Publique",
+        "visibility_ijpb": "Publique (IJPB)",
         "group": "Groupe / laboratoire *", "date": "Date", "phone": "Téléphone",
         "manager_email": "E-mail du responsable *", "admin_staff": "Personnel administratif",
         "admin_phone": "Téléphone du personnel administratif", "admin_email": "E-mail du personnel administratif (facultatif)",
@@ -1747,7 +1747,7 @@ def render_admin():
         })
 
     st.caption(
-        "Correspondance avec le type de laboratoire : Privée → Prix privé ; Public → Prix public ; Public (IJPB) → Prix public (IJPB). "
+        "Correspondance avec le type de laboratoire : Privée → Prix privé ; Publique → Prix public ; Publique (IJPB) → Prix public (IJPB). "
         "Saisissez les tarifs unitaires en euros. Les cellules vides correspondent à un tarif non renseigné."
         if is_fr else
         "Mapping to laboratory type: Private → Private price; Public → Public price; Public (IJPB) → Public price (IJPB). "
