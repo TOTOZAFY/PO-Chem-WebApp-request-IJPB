@@ -1699,7 +1699,7 @@ def render_admin():
     type_column = "Type d'analyse" if is_fr else "Analysis type"
     public_column = "Prix public" if is_fr else "Public price"
     private_column = "Prix privé" if is_fr else "Private price"
-    inrae_column = "Prix public INRAE" if is_fr else "INRAE public price"
+    inrae_column = "Prix public (IJPB)" if is_fr else "Public price (IJPB)"
     catalog_rows = []
     for analysis_type in managed_types:
         saved = catalog_by_type.get(analysis_type, {})
@@ -1715,9 +1715,11 @@ def render_admin():
         })
 
     st.caption(
-        "Saisissez des montants numériques en euros. Les cellules vides correspondent à un tarif non renseigné."
+        "Correspondance avec le type de laboratoire : Privée → Prix privé ; Public → Prix public ; Public (IJPB) → Prix public (IJPB). "
+        "Saisissez les tarifs unitaires en euros. Les cellules vides correspondent à un tarif non renseigné."
         if is_fr else
-        "Enter numeric amounts in euros. Empty cells mean that no price has been set."
+        "Mapping to laboratory type: Private → Private price; Public → Public price; Public (IJPB) → Public price (IJPB). "
+        "Enter unit prices in euros. Empty cells mean that no price has been set."
     )
     edited_catalog = st.data_editor(
         catalog_rows,
@@ -1737,7 +1739,7 @@ def render_admin():
                 min_value=0.0, step=0.01, format="%.2f €"
             ),
             inrae_column: st.column_config.NumberColumn(
-                "Prix public INRAE (€)" if is_fr else "INRAE public price (€)",
+                "Prix public (IJPB) (€)" if is_fr else "Public price (IJPB) (€)",
                 min_value=0.0, step=0.01, format="%.2f €"
             ),
         },
