@@ -2064,6 +2064,28 @@ def render_admin():
                                 "method used" if analysis_type_upper.endswith("LC-MS/MS") else "Not applicable"
                             )
 
+                            analysis_type_upper = analysis_type.strip().upper()
+                            if analysis_type_upper.endswith("GC-MS"):
+                                mode_label_fr = "Mode d'injection"
+                                mode_label_en = "Injection mode"
+                                mode_value_fr = analysis_mode or "Non renseigné"
+                                mode_value_en = analysis_mode or "Not specified"
+                            elif analysis_type_upper.endswith("LC-HRMS"):
+                                mode_label_fr = "Mode d'ionisation"
+                                mode_label_en = "Ionization mode"
+                                mode_value_fr = analysis_mode or "Non renseigné"
+                                mode_value_en = analysis_mode or "Not specified"
+                            elif analysis_type_upper.endswith("LC-MS/MS"):
+                                mode_label_fr = "Mode analytique"
+                                mode_label_en = "Analytical mode"
+                                mode_value_fr = "méthode utilisée"
+                                mode_value_en = "method used"
+                            else:
+                                mode_label_fr = "Mode analytique"
+                                mode_label_en = "Analytical mode"
+                                mode_value_fr = analysis_mode or "Non applicable"
+                                mode_value_en = analysis_mode or "Not applicable"
+
                             if st.session_state.language == "fr":
                                 body = (
                                     "Bonjour " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
@@ -2242,7 +2264,7 @@ def render_admin():
                                     f"Référence de la demande : {record.get('id', '')}\n"
                                     f"Nombre d'échantillons : {sample_count}\n"
                                     f"Type d'analyse : {analysis_type}\n"
-                                    f"Mode d'injection / ionisation : {analysis_mode or 'Non applicable'}\n"
+                                    f"{mode_label_fr} : {mode_value_fr}\n"
                                     f"Type de laboratoire : {visibility}\n"
                                     f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n\n"
                                     f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\n\n"
@@ -2255,7 +2277,7 @@ def render_admin():
                                     f"Request reference: {record.get('id', '')}\n"
                                     f"Number of samples: {sample_count}\n"
                                     f"Analysis type: {analysis_type}\n"
-                                    f"Injection / ionization mode: {analysis_mode or 'Not applicable'}\n"
+                                    f"{mode_label_en}: {mode_value_en}\n"
                                     f"Laboratory type: {visibility}\n"
                                     f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n\n"
                                     f"Comment: {comment.strip() or 'No comment.'}\n\n"
