@@ -2046,6 +2046,24 @@ def render_admin():
                         else:
                             link = f"{app_url}/?fair_token={record['fair_token']}"
                             subject = "Compléter les métadonnées FAIR – " + record.get("project_name", "")
+                            analysis_type_upper = analysis_type.strip().upper()
+                            if analysis_type_upper.endswith("GC-MS"):
+                                mode_label_fr = "Mode d'injection"
+                                mode_label_en = "Injection mode"
+                            elif analysis_type_upper.endswith("LC-HRMS"):
+                                mode_label_fr = "Mode d'ionisation"
+                                mode_label_en = "Ionization mode"
+                            else:
+                                mode_label_fr = "Mode analytique"
+                                mode_label_en = "Analytical mode"
+
+                            mode_value_fr = analysis_mode or (
+                                "méthode utilisée" if analysis_type_upper.endswith("LC-MS/MS") else "Non applicable"
+                            )
+                            mode_value_en = analysis_mode or (
+                                "method used" if analysis_type_upper.endswith("LC-MS/MS") else "Not applicable"
+                            )
+
                             if st.session_state.language == "fr":
                                 body = (
                                     "Bonjour " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
