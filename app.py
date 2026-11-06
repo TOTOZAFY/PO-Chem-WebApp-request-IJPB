@@ -3159,6 +3159,7 @@ else:
         ("Demande d'analyse" if _fr_navigation else "Analysis request"): "form",
         ("FAIR" if _fr_navigation else "FAIR"): "fair",
         ("Administrateur" if _fr_navigation else "Administrator"): "admin",
+        ("Contact" if _fr_navigation else "Contact"): "contact",
     }
     _selected_navigation_label = st.sidebar.radio(
         "Navigation",
@@ -3174,54 +3175,8 @@ else:
     st.session_state["main_navigation_page"] = page
 
 
-# Contact form in the sidebar, directly below the main navigation.
+# Contact is a dedicated main page so the form uses the full content area.
 _contact_fr = st.session_state.get("language", "fr") == "fr"
-with st.sidebar.expander("Contact" if _contact_fr else "Contact", expanded=False):
-    with st.form("sidebar_contact_form", clear_on_submit=True):
-        _contact_sender = st.text_input(
-            "Votre adresse e-mail *" if _contact_fr else "Your email address *",
-            placeholder="nom@exemple.fr",
-        )
-        _contact_subject = st.text_input(
-            "Objet *" if _contact_fr else "Subject *",
-        )
-        _contact_message = st.text_area(
-            "Message *" if _contact_fr else "Message *",
-            height=180,
-            placeholder=("Écrivez votre message ici…" if _contact_fr else "Write your message here…"),
-        )
-        _contact_submit = st.form_submit_button(
-            "Envoyer le message" if _contact_fr else "Send message",
-            use_container_width=True,
-        )
-    if _contact_submit:
-        _email_pattern = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
-        if not re.match(_email_pattern, _contact_sender.strip()):
-            st.sidebar.error("Veuillez saisir une adresse e-mail valide." if _contact_fr else "Please enter a valid email address.")
-        elif not _contact_subject.strip() or not _contact_message.strip():
-            st.sidebar.error("Veuillez renseigner l’objet et le message." if _contact_fr else "Please enter both a subject and a message.")
-        else:
-            try:
-                _contact_settings = load_notification_settings()
-                _contact_admin_email = str(_contact_settings.get("admin_email") or DEFAULT_ADMIN_EMAIL).strip()
-                if not _contact_admin_email:
-                    raise RuntimeError("L'adresse e-mail principale de l'administrateur n'est pas configurée." if _contact_fr else "The administrator's primary email address is not configured.")
-                _contact_mail_subject = ("[Contact plateforme] " if _contact_fr else "[Platform contact] ") + _contact_subject.strip()
-                _contact_mail_body = (
-                    f"Message envoyé depuis le formulaire Contact de PO-Chem-WebApp.\n\n"
-                    f"Adresse de réponse : {_contact_sender.strip()}\n"
-                    f"Objet : {_contact_subject.strip()}\n\n"
-                    f"Message :\n{_contact_message.strip()}"
-                )
-                send_email(
-                    _contact_admin_email,
-                    _contact_mail_subject,
-                    _contact_mail_body,
-                    reply_to=_contact_sender.strip(),
-                )
-                st.sidebar.success("Votre message a été envoyé à l’administrateur." if _contact_fr else "Your message has been sent to the administrator.")
-            except Exception as _contact_exc:
-                st.sidebar.error(("L’envoi du message a échoué : " if _contact_fr else "Message could not be sent: ") + str(_contact_exc))
 
 
 # Shared platform resources: always visible below the navigation menu for every user.
@@ -3274,6 +3229,58 @@ elif page == "admin":
 
 elif page == "fair":
     render_fair_portal()
+elif page == "contact":
+    st.title("Contacter l’administrateur" if st.session_state.language == "fr" else "Contact the administrator")
+    st.write(
+        "Utilisez ce formulaire pour envoyer directement un message à l’administrateur de la plateforme."
+        if st.session_state.language == "fr" else
+        "Use this form to send a message directly to the platform administrator."
+    )
+    with st.form("main_contact_form", clear_on_submit=True):
+        _contact_sender = st.text_input(
+            "Votre adresse e-mail *" if _contact_fr else "Your email address *",
+            placeholder="nom@exemple.fr",
+        )
+        _contact_subject = st.text_input(
+            "Objet *" if _contact_fr else "Subject *",
+        )
+        _contact_message = st.text_area(
+            "Message *" if _contact_fr else "Message *",
+            height=300,
+            placeholder=("Écrivez votre message ici…" if _contact_fr else "Write your message here…"),
+        )
+        _contact_submit = st.form_submit_button(
+            "Envoyer le message" if _contact_fr else "Send message",
+            use_container_width=True,
+        )
+    if _contact_submit:
+        _email_pattern = r"^[^\s@]+@[^\s@]+\.[^\s@]+$"
+        if not re.match(_email_pattern, _contact_sender.strip()):
+            st.error("Veuillez saisir une adresse e-mail valide." if _contact_fr else "Please enter a valid email address.")
+        elif not _contact_subject.strip() or not _contact_message.strip():
+            st.error("Veuillez renseigner l’objet et le message." if _contact_fr else "Please enter both a subject and a message.")
+        else:
+            try:
+                _contact_settings = load_notification_settings()
+                _contact_admin_email = str(_contact_settings.get("admin_email") or DEFAULT_ADMIN_EMAIL).strip()
+                if not _contact_admin_email:
+                    raise RuntimeError("L'adresse e-mail principale de l'administrateur n'est pas configurée." if _contact_fr else "The administrator's primary email address is not configured.")
+                _contact_mail_subject = ("[Contact plateforme] " if _contact_fr else "[Platform contact] ") + _contact_subject.strip()
+                _contact_mail_body = (
+                    f"Message envoyé depuis le formulaire Contact de PO-Chem-WebApp.\n\n"
+                    f"Adresse de réponse : {_contact_sender.strip()}\n"
+                    f"Objet : {_contact_subject.strip()}\n\n"
+                    f"Message :\n{_contact_message.strip()}"
+                )
+                send_email(
+                    _contact_admin_email,
+                    _contact_mail_subject,
+                    _contact_mail_body,
+                    reply_to=_contact_sender.strip(),
+                )
+                st.success("Votre message a été envoyé à l’administrateur." if _contact_fr else "Your message has been sent to the administrator.")
+            except Exception as _contact_exc:
+                st.error(("L’envoi du message a échoué : " if _contact_fr else "Message could not be sent: ") + str(_contact_exc))
 else:
     render_form()
 
