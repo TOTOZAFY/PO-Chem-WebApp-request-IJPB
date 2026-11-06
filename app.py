@@ -1626,14 +1626,22 @@ def render_admin():
         except ValueError:
             return None
 
+    type_column = "Type d'analyse" if is_fr else "Analysis type"
+    public_column = "Prix public" if is_fr else "Public price"
+    private_column = "Prix privé" if is_fr else "Private price"
+    inrae_column = "Prix public INRAE" if is_fr else "INRAE public price"
     catalog_rows = []
     for analysis_type in managed_types:
         saved = catalog_by_type.get(analysis_type, {})
+        translated_type = type_translations.get(
+            analysis_type, ANALYSIS_TYPES_EN.get(analysis_type, analysis_type)
+        )
         catalog_rows.append({
-            "Type d'analyse" if is_fr else "Analysis type": analysis_type,
-            "Prix public" if is_fr else "Public price": numeric_price(saved.get("public_price")),
-            "Prix privé" if is_fr else "Private price": numeric_price(saved.get("private_price")),
-            "Prix public INRAE" if is_fr else "INRAE public price": numeric_price(saved.get("inrae_public_price")),
+            type_column: analysis_type if is_fr else translated_type,
+            "_canonical_type": analysis_type,
+            public_column: numeric_price(saved.get("public_price")),
+            private_column: numeric_price(saved.get("private_price")),
+            inrae_column: numeric_price(saved.get("inrae_public_price")),
         })
 
     st.caption(
@@ -1648,18 +1656,17 @@ def render_admin():
         hide_index=True,
         num_rows="fixed",
         column_config={
-            ("Type d'analyse" if is_fr else "Analysis type"): st.column_config.TextColumn(
-                "Type d'analyse" if is_fr else "Analysis type", required=True
-            ),
-            ("Prix public" if is_fr else "Public price"): st.column_config.NumberColumn(
+            type_column: st.column_config.TextColumn(type_column, required=True),
+            "_canonical_type": None,
+            public_column: st.column_config.NumberColumn(
                 "Prix public (€)" if is_fr else "Public price (€)",
                 min_value=0.0, step=0.01, format="%.2f €"
             ),
-            ("Prix privé" if is_fr else "Private price"): st.column_config.NumberColumn(
+            private_column: st.column_config.NumberColumn(
                 "Prix privé (€)" if is_fr else "Private price (€)",
                 min_value=0.0, step=0.01, format="%.2f €"
             ),
-            ("Prix public INRAE" if is_fr else "INRAE public price"): st.column_config.NumberColumn(
+            inrae_column: st.column_config.NumberColumn(
                 "Prix public INRAE (€)" if is_fr else "INRAE public price (€)",
                 min_value=0.0, step=0.01, format="%.2f €"
             ),
@@ -1693,19 +1700,23 @@ def render_admin():
         cleaned_catalog = []
         cleaned_translations = dict(type_translations)
         for row in rows:
-            label = str(row.get("Type d'analyse" if is_fr else "Analysis type", "")).strip()
-            if not label:
+            display_label = str(row.get(type_column, "")).strip()
+            canonical_label = display_label if is_fr else str(row.get("_canonical_type", "")).strip()
+            if not canonical_label or not display_label:
                 continue
-            if label in cleaned_types:
+            if canonical_label in cleaned_types:
                 raise ValueError("Un type d'analyse est présent plusieurs fois." if is_fr else "An analysis type is duplicated.")
-            cleaned_types.append(label)
+            cleaned_types.append(canonical_label)
             cleaned_catalog.append({
-                "type": label,
-                "public_price": numeric_price(row.get("Prix public" if is_fr else "Public price")),
-                "private_price": numeric_price(row.get("Prix privé" if is_fr else "Private price")),
-                "inrae_public_price": numeric_price(row.get("Prix public INRAE" if is_fr else "INRAE public price")),
+                "type": canonical_label,
+                "public_price": numeric_price(row.get(public_column)),
+                "private_price": numeric_price(row.get(private_column)),
+                "inrae_public_price": numeric_price(row.get(inrae_column)),
             })
-            cleaned_translations.setdefault(label, ANALYSIS_TYPES_EN.get(label, label))
+            if not is_fr:
+                cleaned_translations[canonical_label] = display_label
+            else:
+                cleaned_translations.setdefault(canonical_label, ANALYSIS_TYPES_EN.get(canonical_label, canonical_label))
         save_notification_settings({
             "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
             "admin_cc_email": notification_settings.get("admin_cc_email", ""),
@@ -1739,10 +1750,11 @@ def render_admin():
                 try:
                     updated_rows = edited_catalog_rows()
                     updated_rows.append({
-                        "Type d'analyse" if is_fr else "Analysis type": candidate,
-                        "Prix public" if is_fr else "Public price": None,
-                        "Prix privé" if is_fr else "Private price": None,
-                        "Prix public INRAE" if is_fr else "INRAE public price": None,
+                        type_column: candidate,
+                        "_canonical_type": candidate,
+                        public_column: None,
+                        private_column: None,
+                        inrae_column: None,
                     })
                     if new_type_en.strip():
                         type_translations[candidate] = new_type_en.strip()
@@ -1758,16 +1770,25 @@ def render_admin():
         st.session_state["show_delete_analysis_catalog_type"] = True
     if st.session_state.get("show_delete_analysis_catalog_type", False) and removable_types:
         with st.form("delete_analysis_catalog_type_form"):
-            type_to_remove = st.selectbox(
+            remove_labels = {
+                item: item if is_fr else type_translations.get(item, ANALYSIS_TYPES_EN.get(item, item))
+                for item in removable_types
+            }
+            selected_remove_label = st.selectbox(
                 "Type à supprimer" if is_fr else "Type to delete",
-                options=removable_types,
+                options=list(remove_labels.values()),
+            )
+            type_to_remove = next(
+                (canonical for canonical, translated in remove_labels.items()
+                 if translated == selected_remove_label),
+                selected_remove_label,
             )
             confirm_delete_type = st.form_submit_button("Confirmer la suppression" if is_fr else "Confirm deletion")
         if confirm_delete_type:
             try:
                 remaining_rows = [
                     row for row in edited_catalog_rows()
-                    if str(row.get("Type d'analyse" if is_fr else "Analysis type", "")).strip() != type_to_remove
+                    if str(row.get("_canonical_type", row.get(type_column, ""))).strip() != type_to_remove
                 ]
                 persist_analysis_catalog(remaining_rows)
                 st.session_state.pop("show_delete_analysis_catalog_type", None)
