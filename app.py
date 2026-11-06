@@ -192,7 +192,7 @@ TRANSLATIONS = {
         "The request form can also be downloaded after submission if needed.",
         "steps": ["Contacts", "Project description", "Samples", "Preliminary results & bibliography",
                   "Additional information", "Review & submission"],
-        "general": "1. General information", "requester_section": "Requester", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Project manager *", "manager_last_name": "Last name *", "manager_first_name": "First name *",
+        "general": "1. General information", "requester_section": "Requester", "administrator_section": "Plant observatory chemistry and metabolism platform", "manager": "Project manager *", "manager_last_name": "Last name *", "manager_first_name": "First name *",
         "visibility": "Laboratory type *",
         "visibility_private": "Private",
         "visibility_public": "Public",
@@ -2580,7 +2580,7 @@ def render_form():
         .hero h1 {margin: 0; color: #183b56; font-size: 1.8rem;}
         .hero p {margin: .4rem 0 0; color: #526575;}
         </style>
-        <div class="hero"><h1>OV-Chimie-Métabolisme/IJPB-INRAE Versailles</h1>
+        <div class="hero"><h1>{'OV-Chimie-Métabolisme/IJPB-INRAE Versailles' if st.session_state.get('language', 'fr') == 'fr' else 'PO Chemistry-Metabolism/IJPB-INRAE Versailles'}</h1>
         <p>PO-Chem-WebApp-Request</p></div>
         """,
         unsafe_allow_html=True,
@@ -3182,7 +3182,6 @@ _contact_fr = st.session_state.get("language", "fr") == "fr"
 # Shared platform resources: always visible below the navigation menu for every user.
 _footer_fr = st.session_state.get("language", "fr") == "fr"
 st.sidebar.divider()
-st.sidebar.markdown("**OV-Chimie, Métabolisme**")
 # One coherent banner containing the OV-Chimie logo and the partner logos.
 # Keep this asset at the application root so it is included in simple ZIP deployments.
 _platform_banner_path = os.path.join(os.path.dirname(__file__), "ov_chimie_logo_user.png")
