@@ -2747,6 +2747,22 @@ def render_form():
             ]
             for label, value in summary:
                 st.markdown(f"**{label} :** {value or '—'}")
+
+            charter_accepted = st.checkbox(
+                "J’ai lu et j’accepte la charte de la plateforme."
+                if st.session_state.language == "fr"
+                else "I have read and agree to the platform charter.",
+                value=False,
+                key="charter_accepted_checkbox",
+            )
+            st.caption(
+                "La charte est disponible dans le menu latéral, sous le logo de la plateforme, "
+                "en cliquant sur « Télécharger la charte de la plate-forme (PDF) »."
+                if st.session_state.language == "fr"
+                else "The charter is available in the sidebar, below the platform logo, "
+                "using the “Download the platform charter (PDF)” button."
+            )
+
             with st.expander(t("all_answers")):
                 answer_labels = {
                     "project_manager": t("manager_last_name"),
@@ -2788,9 +2804,15 @@ def render_form():
                 not (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques"))
                 or bool(data.get("analysis_details", "").strip())
             )
-            form_is_valid = all(required_values) and email_is_valid and specific_details_valid and analyses_valid
+            form_is_valid = all(required_values) and email_is_valid and specific_details_valid and analyses_valid and charter_accepted
             if not form_is_valid:
-                if (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques")) and not data.get("analysis_details", "").strip():
+                if not charter_accepted:
+                    st.warning(
+                        "Vous devez lire et accepter la charte de la plateforme avant de soumettre la demande."
+                        if st.session_state.language == "fr"
+                        else "You must read and accept the platform charter before submitting the request."
+                    )
+                elif (data.get("analysis_type", "").startswith("Développement de méthodes spécifiques") or data.get("analysis_type", "").startswith("Développements spécifiques")) and not data.get("analysis_details", "").strip():
                     st.warning(t("specific_development_required"))
                 else:
                     st.warning(t("required"))
@@ -2841,6 +2863,8 @@ def render_form():
                                 "submitted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                                 "status": "pending",
                                 "admin_comment": "",
+                                "charter_accepted": True,
+                                "charter_accepted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                                 "document_path": remote_file,
                                 "filename": filename,
                             }
