@@ -119,6 +119,7 @@ TRANSLATIONS = {
         "platform_staff_email": "E-mail du personnel de la plateforme (facultatif)",
         "admin_secondary_email": "E-mail secondaire de l’administrateur (CC, facultatif)",
         "ijpb_admin_email": "E-mail du personnel administratif de l’IJPB (CC, facultatif)",
+        "platform_staff_notification_email": "E-mail de notification du personnel de la plateforme (CC, facultatif)",
         "save_notification_settings": "Enregistrer les adresses e-mail",
         "notification_settings_saved": "Adresses de notification enregistrées dans Nextcloud.",
         "select_request": "Sélectionner une demande", "status": "Décision / statut",
@@ -239,6 +240,7 @@ TRANSLATIONS = {
         "platform_staff_email": "Platform staff email (optional)",
         "admin_secondary_email": "Administrator secondary email (CC, optional)",
         "ijpb_admin_email": "IJPB administrative staff email (CC, optional)",
+        "platform_staff_notification_email": "Platform staff notification email (CC, optional)",
         "save_notification_settings": "Save email addresses",
         "notification_settings_saved": "Notification addresses saved to Nextcloud.",
         "select_request": "Select a request", "status": "Decision / status",
@@ -438,6 +440,7 @@ def load_notification_settings():
             "admin_email": DEFAULT_ADMIN_EMAIL,
             "admin_cc_email": "",
             "ijpb_admin_email": "",
+            "platform_staff_notification_email": "",
             "analysis_types": ANALYSIS_TYPES.copy(),
             "analysis_type_translations": ANALYSIS_TYPES_EN.copy(),
         }
@@ -449,6 +452,7 @@ def load_notification_settings():
         "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
         "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
         "ijpb_admin_email": str(settings.get("ijpb_admin_email", "")).strip(),
+        "platform_staff_notification_email": str(settings.get("platform_staff_notification_email", "")).strip(),
         "analysis_types": list(dict.fromkeys(
             ANALYSIS_TYPES + [
                 normalize_analysis_type_name(x)
@@ -1748,6 +1752,10 @@ def render_admin():
             t("ijpb_admin_email"),
             value=notification_settings.get("ijpb_admin_email", ""),
         )
+        platform_staff_notification_email = st.text_input(
+            t("platform_staff_notification_email"),
+            value=notification_settings.get("platform_staff_notification_email", ""),
+        )
         save_recipients = st.form_submit_button(t("save_notification_settings"))
     if save_recipients:
         if not admin_primary.strip():
@@ -1758,6 +1766,7 @@ def render_admin():
                     "admin_email": admin_primary.strip(),
                     "admin_cc_email": admin_secondary.strip(),
                     "ijpb_admin_email": ijpb_admin_email.strip(),
+                    "platform_staff_notification_email": platform_staff_notification_email.strip(),
                     "analysis_types": notification_settings.get("analysis_types", ANALYSIS_TYPES),
                     "analysis_type_translations": notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN),
                     "analysis_catalog": notification_settings.get("analysis_catalog", []),
@@ -1897,6 +1906,7 @@ def render_admin():
             "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
             "admin_cc_email": notification_settings.get("admin_cc_email", ""),
             "ijpb_admin_email": notification_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"),
+            "platform_staff_notification_email": notification_settings.get("platform_staff_notification_email", ""),
             "analysis_types": cleaned_types,
             "analysis_type_translations": cleaned_translations,
             "analysis_catalog": cleaned_catalog,
@@ -2729,10 +2739,19 @@ def render_admin():
                             # On acceptance, enrich the requester notification with the
                             # request details and the applicable catalogue price.
                             recipients_settings = load_notification_settings()
-                            cc_addresses = [record.get("admin_email", ""), record.get("platform_staff_email", "")]
+                            # Acceptance recipients are deliberately separated by role:
+                            # requester is the primary recipient; platform staff, IJPB
+                            # administrative staff and the assigned operator are copied.
+                            # The request form may contain a platform contact, while the
+                            # administrator settings contain the platform notification address.
+                            cc_addresses = []
                             if new_status == "accepted":
-                                cc_addresses.append(recipients_settings.get("ijpb_admin_email", ""))
-                                cc_addresses.append(record.get("assigned_operator_email", ""))
+                                cc_addresses.extend([
+                                    recipients_settings.get("platform_staff_notification_email", ""),
+                                    record.get("platform_staff_email", ""),
+                                    recipients_settings.get("ijpb_admin_email", ""),
+                                    record.get("assigned_operator_email", ""),
+                                ])
                                 visibility = str(record.get("visibility", "Public (IJPB)") or "Public (IJPB)")
                                 analysis_items = record.get("analysis_items") or [{
                                     "analysis_type": record.get("analysis_type", ""),
@@ -3312,8 +3331,8 @@ def render_form():
                                 # Recipients are editable in the administrator area and stored in Nextcloud.
                                 recipients = load_notification_settings()
                                 admin_email = recipients.get("admin_email") or DEFAULT_ADMIN_EMAIL
-                                internal_cc = join_email_recipients(
-                                    recipients.get("ijpb_admin_email", ""),
+                                platform_staff_cc = join_email_recipients(
+                                    recipients.get("platform_staff_notification_email", ""),
                                 )
                                 send_email(
                                     admin_email,
@@ -3331,7 +3350,7 @@ def render_form():
                                         analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
                                         path=remote_file,
                                     ),
-                                    cc=internal_cc,
+                                    cc=platform_staff_cc,
                                     reply_to=record.get("manager_email", "").strip() or None,
                                 )
                                 st.success(t("submitted_notified"))
