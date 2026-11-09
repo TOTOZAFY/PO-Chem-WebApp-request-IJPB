@@ -2927,6 +2927,24 @@ def render_form():
         st.session_state.step -= 1
         st.rerun()
 
+    # Quick navigation to any of the six request sections.
+    st.markdown(
+        "**Accès rapide aux rubriques**" if st.session_state.language == "fr"
+        else "**Quick section navigation**"
+    )
+    step_columns = st.columns(len(steps))
+    for step_index, step_label in enumerate(steps):
+        with step_columns[step_index]:
+            button_label = step_label
+            if st.button(
+                button_label,
+                key=f"quick_step_navigation_{step_index}",
+                use_container_width=True,
+                type="primary" if step_index == step else "secondary",
+            ):
+                st.session_state.step = step_index
+                st.rerun()
+
     if st.session_state.get("last_submission"):
         last = st.session_state.last_submission
         st.download_button(
