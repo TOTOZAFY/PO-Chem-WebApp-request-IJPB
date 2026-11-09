@@ -35,6 +35,7 @@ CLOUD_FOLDER = "MyDrive/Demandes_Analyses"
 METADATA_PATH = "MyDrive/demandes_metadata.json"
 NOTIFICATION_SETTINGS_PATH = "MyDrive/notification_settings.json"
 USER_PROFILES_PATH = "MyDrive/user_profiles.json"
+OPERATORS_PATH = "MyDrive/operators_directory.json"
 FAIR_FOLDER = CLOUD_FOLDER
 DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
 ANALYSIS_TYPES = [
@@ -368,6 +369,38 @@ def save_metadata(records):
     response = webdav_request(
         "PUT", METADATA_PATH,
         data=json.dumps(records, ensure_ascii=False, indent=2).encode("utf-8"),
+        timeout=30,
+    )
+    response.raise_for_status()
+
+
+def load_operators_directory():
+    """Load the reusable operator directory from Nextcloud."""
+    response = webdav_request("GET", OPERATORS_PATH)
+    if response.status_code == 404:
+        return []
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise RuntimeError("Le répertoire des opérateurs dans Nextcloud est invalide.")
+    operators = []
+    seen = set()
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name", "")).strip()
+        email = str(item.get("email", "")).strip()
+        key = (name.casefold(), email.casefold())
+        if name and email and key not in seen:
+            operators.append({"name": name, "email": email})
+            seen.add(key)
+    return operators
+
+
+def save_operators_directory(operators):
+    response = webdav_request(
+        "PUT", OPERATORS_PATH,
+        data=json.dumps(operators, ensure_ascii=False, indent=2).encode("utf-8"),
         timeout=30,
     )
     response.raise_for_status()
@@ -2238,55 +2271,101 @@ def render_admin():
                 # Operator assigned to perform the analyses for this request.
                 operator_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
                 operator_save_label = "Enregistrer l’opérateur" if st.session_state.language == "fr" else "Save assigned operator"
-                operator_value = st.text_input(
+                try:
+                    operators_directory = load_operators_directory()
+                except Exception as exc:
+                    operators_directory = []
+                    st.error(
+                        f"Impossible de charger le répertoire des opérateurs depuis Nextcloud : {exc}"
+                        if st.session_state.language == "fr"
+                        else f"Could not load the operator directory from Nextcloud: {exc}"
+                    )
+
+                current_operator = {
+                    "name": str(record.get("assigned_operator", "")).strip(),
+                    "email": str(record.get("assigned_operator_email", "")).strip(),
+                }
+                operator_choices = [{"name": "", "email": ""}] + operators_directory.copy()
+                if current_operator["name"] and current_operator not in operator_choices:
+                    operator_choices.append(current_operator)
+                current_index = next(
+                    (i for i, op in enumerate(operator_choices)
+                     if op["name"] == current_operator["name"] and op["email"] == current_operator["email"]),
+                    0,
+                )
+                selected_operator = st.selectbox(
                     operator_label,
-                    value=record.get("assigned_operator", ""),
-                    key=f"assigned_operator_input_{selected_id}",
-                    placeholder="Nom de l’opérateur" if st.session_state.language == "fr" else "Operator name",
+                    options=operator_choices,
+                    index=current_index,
+                    format_func=lambda op: (
+                        f"{op['name']} — {op['email']}" if op["name"] else
+                        ("— Aucun opérateur —" if st.session_state.language == "fr" else "— No operator —")
+                    ),
+                    key=f"assigned_operator_select_{selected_id}",
                 )
                 operator_email_label = (
                     "Adresse e-mail de la personne en charge de l’analyse"
                     if st.session_state.language == "fr"
                     else "Email address of the person responsible for the analysis"
                 )
-                operator_email_value = st.text_input(
+                st.text_input(
                     operator_email_label,
-                    value=record.get("assigned_operator_email", ""),
-                    key=f"assigned_operator_email_input_{selected_id}",
-                    placeholder="nom@inrae.fr",
-                    help=(
-                        "Cette adresse sera mise en copie de la notification envoyée au demandeur lorsque la demande sera acceptée."
-                        if st.session_state.language == "fr"
-                        else "This address will be copied on the notification sent to the requester when the request is accepted."
-                    ),
+                    value=selected_operator["email"],
+                    disabled=True,
+                    key=f"assigned_operator_email_display_{selected_id}",
                 )
-                operator_email_is_valid = (
-                    not operator_email_value.strip()
-                    or bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", operator_email_value.strip()))
-                )
-                if not operator_email_is_valid:
-                    st.warning(
-                        "Veuillez saisir une adresse e-mail valide."
-                        if st.session_state.language == "fr"
-                        else "Please enter a valid email address."
-                    )
                 if st.button(operator_save_label, key=f"save_assigned_operator_{selected_id}"):
-                    if not operator_email_is_valid:
-                        st.error(
-                            "L’adresse e-mail de la personne en charge est invalide."
-                            if st.session_state.language == "fr"
-                            else "The responsible person's email address is invalid."
-                        )
-                    else:
-                        record["assigned_operator"] = operator_value.strip()
-                        record["assigned_operator_email"] = operator_email_value.strip()
-                        record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if operator_value.strip() else ""
-                        try:
-                            save_metadata(records)
-                            st.success("Opérateur et adresse e-mail enregistrés pour cette demande." if st.session_state.language == "fr" else "Operator and email address saved for this request.")
-                            st.rerun()
-                        except Exception as exc:
-                            st.error(f"{t('cloud_error')} {exc}")
+                    record["assigned_operator"] = selected_operator["name"]
+                    record["assigned_operator_email"] = selected_operator["email"]
+                    record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if selected_operator["name"] else ""
+                    try:
+                        save_metadata(records)
+                        st.success("Opérateur et adresse e-mail enregistrés pour cette demande." if st.session_state.language == "fr" else "Operator and email address saved for this request.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"{t('cloud_error')} {exc}")
+
+                with st.expander("Ajouter un opérateur au répertoire" if st.session_state.language == "fr" else "Add an operator to the directory"):
+                    new_operator_name = st.text_input(
+                        "Nom de l’opérateur" if st.session_state.language == "fr" else "Operator name",
+                        key=f"new_operator_name_{selected_id}",
+                    )
+                    new_operator_email = st.text_input(
+                        "Adresse e-mail" if st.session_state.language == "fr" else "Email address",
+                        placeholder="nom@inrae.fr",
+                        key=f"new_operator_email_{selected_id}",
+                    )
+                    if st.button(
+                        "Ajouter cet opérateur" if st.session_state.language == "fr" else "Add this operator",
+                        key=f"add_operator_directory_{selected_id}",
+                    ):
+                        clean_name = new_operator_name.strip()
+                        clean_email = new_operator_email.strip()
+                        valid_email = bool(re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", clean_email))
+                        if not clean_name or not valid_email:
+                            st.error(
+                                "Renseignez un nom et une adresse e-mail valide."
+                                if st.session_state.language == "fr"
+                                else "Enter a name and a valid email address."
+                            )
+                        elif any(op["name"].casefold() == clean_name.casefold() for op in operators_directory):
+                            st.error(
+                                "Un opérateur portant déjà ce nom existe dans le répertoire."
+                                if st.session_state.language == "fr"
+                                else "An operator with this name already exists in the directory."
+                            )
+                        else:
+                            try:
+                                operators_directory.append({"name": clean_name, "email": clean_email})
+                                save_operators_directory(operators_directory)
+                                st.success(
+                                    "Opérateur ajouté au répertoire. Il est maintenant disponible dans le menu déroulant."
+                                    if st.session_state.language == "fr"
+                                    else "Operator added. It is now available in the dropdown."
+                                )
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(f"{t('cloud_error')} {exc}")
     
                 stored_type = record.get("analysis_type", "")
                 shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
