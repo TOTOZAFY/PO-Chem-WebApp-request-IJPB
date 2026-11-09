@@ -2775,23 +2775,40 @@ def render_admin():
                 delete_label = "Supprimer définitivement" if st.session_state.language == "fr" else "Delete permanently"
                 confirmed = st.checkbox(confirm_label, key=f"confirm_delete_{archived_id}")
                 if st.button("🗑️ " + delete_label, type="primary", disabled=not confirmed, key=f"delete_{archived_id}"):
-                    document_path = archived_record.get("document_path", "")
                     try:
-                        # Delete the associated Word document first. Keep the metadata
-                        # untouched if Nextcloud reports a real deletion error.
-                        if document_path:
-                            delete_response = webdav_request("DELETE", document_path)
+                        # Delete every document linked to this request before removing
+                        # its metadata. A missing remote file (404) is already deleted.
+                        document_paths = [
+                            archived_record.get("document_path", ""),
+                            archived_record.get("unsigned_quote_path", ""),
+                            archived_record.get("signed_quote_path", ""),
+                            archived_record.get("purchase_order_path", ""),
+                            archived_record.get("fair_path") or fair_remote_path(archived_record),
+                        ]
+                        # Avoid sending duplicate DELETE requests if two fields point
+                        # to the same remote file.
+                        unique_document_paths = list(dict.fromkeys(
+                            str(path).strip() for path in document_paths if path and str(path).strip()
+                        ))
+                        for linked_path in unique_document_paths:
+                            delete_response = webdav_request("DELETE", linked_path)
                             if delete_response.status_code not in (200, 202, 204, 404):
                                 delete_response.raise_for_status()
-                        fair_path = archived_record.get("fair_path") or fair_remote_path(archived_record)
-                        fair_delete = webdav_request("DELETE", fair_path)
-                        if fair_delete.status_code not in (200, 202, 204, 404): fair_delete.raise_for_status()
+
                         records = [r for r in records if r.get("id") != archived_id]
                         save_metadata(records)
-                        st.success("Demande et document supprimés définitivement." if st.session_state.language == "fr" else "Request and document permanently deleted.")
+                        st.success(
+                            "Demande et tous ses documents associés supprimés définitivement."
+                            if st.session_state.language == "fr"
+                            else "Request and all linked documents permanently deleted."
+                        )
                         st.rerun()
                     except Exception as exc:
-                        st.error(f"Suppression impossible : {exc}" if st.session_state.language == "fr" else f"Deletion failed: {exc}")
+                        st.error(
+                            f"Suppression impossible : {exc}"
+                            if st.session_state.language == "fr"
+                            else f"Deletion failed: {exc}"
+                        )
     
 def render_form():
     if not os.path.isfile(TEMPLATE_PATH):
