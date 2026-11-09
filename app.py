@@ -2180,444 +2180,483 @@ def render_admin():
         if not active_records:
             st.info(t("no_requests"))
         else:
+            search_label = (
+                "Rechercher par projet, demandeur ou référence"
+                if st.session_state.language == "fr"
+                else "Search by project, requester or request reference"
+            )
+            search_query = st.text_input(
+                search_label,
+                key="admin_request_search",
+                placeholder=(
+                    "Nom du projet, nom du demandeur ou référence..."
+                    if st.session_state.language == "fr"
+                    else "Project name, requester name or reference..."
+                ),
+            ).strip().casefold()
+            # Show the most recently submitted requests first in the selector.
+            request_options_records = sorted(
+                active_records,
+                key=lambda r: str(r.get("submitted_at", "")),
+                reverse=True,
+            )
+            if search_query:
+                request_options_records = [
+                    r for r in request_options_records
+                    if search_query in " ".join([
+                        str(r.get("project_name", "")),
+                        str(r.get("project_manager", "")),
+                        str(r.get("project_manager_first_name", "")),
+                        str(r.get("id", "")),
+                    ]).casefold()
+                ]
             options = {
                 f"{request_display_label(r)} — {r.get('id', '')}": r["id"]
-                for r in active_records
+                for r in request_options_records
             }
-            selected_label = st.selectbox(t("select_request"), list(options.keys()), key="active_request_select")
-            selected_id = options[selected_label]
-            record = next(r for r in active_records if r.get("id") == selected_id)
-            st.write(f"**{t('manager')} :** {record.get('project_manager','')}")
-            requester_email = record.get("manager_email", "").strip()
-            if requester_email:
-                st.markdown(f"**{t('manager_email')} :** [{requester_email}](mailto:{requester_email})")
+            if options:
+                selected_label = st.selectbox(t("select_request"), list(options.keys()), key="active_request_select")
+                selected_id = options[selected_label]
             else:
-                st.write(f"**{t('manager_email')} :** —")
-            st.write(f"**{t('group')} :** {record.get('group','')}")
-            st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
-
-            # Operator assigned to perform the analyses for this request.
-            operator_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
-            operator_save_label = "Enregistrer l’opérateur" if st.session_state.language == "fr" else "Save assigned operator"
-            operator_value = st.text_input(
-                operator_label,
-                value=record.get("assigned_operator", ""),
-                key=f"assigned_operator_input_{selected_id}",
-                placeholder="Nom de l’opérateur" if st.session_state.language == "fr" else "Operator name",
-            )
-            operator_email_label = (
-                "Adresse e-mail de la personne en charge de l’analyse"
-                if st.session_state.language == "fr"
-                else "Email address of the person responsible for the analysis"
-            )
-            operator_email_value = st.text_input(
-                operator_email_label,
-                value=record.get("assigned_operator_email", ""),
-                key=f"assigned_operator_email_input_{selected_id}",
-                placeholder="nom@inrae.fr",
-                help=(
-                    "Cette adresse sera mise en copie de la notification envoyée au demandeur lorsque la demande sera acceptée."
+                selected_id = None
+                st.info(
+                    "Aucune demande ne correspond à votre recherche."
                     if st.session_state.language == "fr"
-                    else "This address will be copied on the notification sent to the requester when the request is accepted."
-                ),
-            )
-            operator_email_is_valid = (
-                not operator_email_value.strip()
-                or bool(re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", operator_email_value.strip()))
-            )
-            if not operator_email_is_valid:
-                st.warning(
-                    "Veuillez saisir une adresse e-mail valide."
-                    if st.session_state.language == "fr"
-                    else "Please enter a valid email address."
+                    else "No requests match your search."
                 )
-            if st.button(operator_save_label, key=f"save_assigned_operator_{selected_id}"):
-                if not operator_email_is_valid:
-                    st.error(
-                        "L’adresse e-mail de la personne en charge est invalide."
-                        if st.session_state.language == "fr"
-                        else "The responsible person's email address is invalid."
-                    )
+            if selected_id is not None:
+                record = next(r for r in active_records if r.get("id") == selected_id)
+                st.write(f"**{t('manager')} :** {record.get('project_manager','')}")
+                requester_email = record.get("manager_email", "").strip()
+                if requester_email:
+                    st.markdown(f"**{t('manager_email')} :** [{requester_email}](mailto:{requester_email})")
                 else:
-                    record["assigned_operator"] = operator_value.strip()
-                    record["assigned_operator_email"] = operator_email_value.strip()
-                    record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if operator_value.strip() else ""
+                    st.write(f"**{t('manager_email')} :** —")
+                st.write(f"**{t('group')} :** {record.get('group','')}")
+                st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
+    
+                # Operator assigned to perform the analyses for this request.
+                operator_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
+                operator_save_label = "Enregistrer l’opérateur" if st.session_state.language == "fr" else "Save assigned operator"
+                operator_value = st.text_input(
+                    operator_label,
+                    value=record.get("assigned_operator", ""),
+                    key=f"assigned_operator_input_{selected_id}",
+                    placeholder="Nom de l’opérateur" if st.session_state.language == "fr" else "Operator name",
+                )
+                operator_email_label = (
+                    "Adresse e-mail de la personne en charge de l’analyse"
+                    if st.session_state.language == "fr"
+                    else "Email address of the person responsible for the analysis"
+                )
+                operator_email_value = st.text_input(
+                    operator_email_label,
+                    value=record.get("assigned_operator_email", ""),
+                    key=f"assigned_operator_email_input_{selected_id}",
+                    placeholder="nom@inrae.fr",
+                    help=(
+                        "Cette adresse sera mise en copie de la notification envoyée au demandeur lorsque la demande sera acceptée."
+                        if st.session_state.language == "fr"
+                        else "This address will be copied on the notification sent to the requester when the request is accepted."
+                    ),
+                )
+                operator_email_is_valid = (
+                    not operator_email_value.strip()
+                    or bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", operator_email_value.strip()))
+                )
+                if not operator_email_is_valid:
+                    st.warning(
+                        "Veuillez saisir une adresse e-mail valide."
+                        if st.session_state.language == "fr"
+                        else "Please enter a valid email address."
+                    )
+                if st.button(operator_save_label, key=f"save_assigned_operator_{selected_id}"):
+                    if not operator_email_is_valid:
+                        st.error(
+                            "L’adresse e-mail de la personne en charge est invalide."
+                            if st.session_state.language == "fr"
+                            else "The responsible person's email address is invalid."
+                        )
+                    else:
+                        record["assigned_operator"] = operator_value.strip()
+                        record["assigned_operator_email"] = operator_email_value.strip()
+                        record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if operator_value.strip() else ""
+                        try:
+                            save_metadata(records)
+                            st.success("Opérateur et adresse e-mail enregistrés pour cette demande." if st.session_state.language == "fr" else "Operator and email address saved for this request.")
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"{t('cloud_error')} {exc}")
+    
+                stored_type = record.get("analysis_type", "")
+                shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
+                admin_analysis_items = record.get("analysis_items") or [{"analysis_type": stored_type, "analysis_mode": record.get("analysis_mode", ""), "sample_count": record.get("sample_count", 1), "analysis_details": record.get("analysis_details", "")}]
+                for analysis_number, analysis in enumerate(admin_analysis_items, 1):
+                    raw_type = analysis.get("analysis_type", "")
+                    display_type = raw_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(raw_type, ANALYSIS_TYPES_EN.get(raw_type, raw_type))
+                    st.write(f"**Analyse {analysis_number if st.session_state.language == 'fr' else 'Analysis ' + str(analysis_number)} :** {display_type} — {analysis.get('sample_count', 1)} échantillon(s)")
+                    if analysis.get("analysis_mode"):
+                        st.caption(f"{t('analysis_mode')} : {analysis.get('analysis_mode')}")
+                    if analysis.get("analysis_details"):
+                        st.caption(f"{t('specific_development_details')} : {analysis.get('analysis_details')}")
+                st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
+                request_status = record.get("status", "pending")
+                request_status_labels = {
+                    "pending": t("status_pending"),
+                    "accepted": t("status_accepted"),
+                    "refused": t("status_refused"),
+                }
+                status_label = "Statut de la demande" if st.session_state.language == "fr" else "Request status"
+                st.write(f"**{status_label} :** {request_status_labels.get(request_status, request_status or '—')}")
+                operator_status_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
+                operator_status_value = record.get("assigned_operator", "").strip() or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
+                st.write(f"**{operator_status_label} :** {operator_status_value}")
+                quotation_imported = bool(record.get("signed_quote_path"))
+                quotation_label = "Devis importé" if st.session_state.language == "fr" else "Quotation uploaded"
+                quotation_value = ("Oui" if st.session_state.language == "fr" else "Yes") if quotation_imported else ("Non" if st.session_state.language == "fr" else "No")
+                st.write(f"**{quotation_label} :** {quotation_value}")
+    
+                fair_status_heading = "État des feuilles FAIR" if st.session_state.language == "fr" else "FAIR sheet completion"
+                st.markdown(f"**{fair_status_heading}**")
+                try:
+                    sheet_statuses = fair_sheet_completion_status(record)
+                    sheet_names_fr = {
+                        "Sample": "Sample",
+                        "Analysis": "Analysis",
+                        "Data treatment": "Data treatment",
+                        "Pipeline Step by Step": "Pipeline Step by Step",
+                    }
+                    for sheet_name, has_content in sheet_statuses.items():
+                        sheet_label = sheet_names_fr[sheet_name]
+                        if st.session_state.language == "fr":
+                            state_text = "Données saisies" if has_content else "Non renseignée"
+                        else:
+                            state_text = "Data entered" if has_content else "Not completed"
+                        st.write(f"- **{sheet_label} :** {state_text}")
+                except Exception as fair_status_error:
+                    st.caption(("État des feuilles FAIR indisponible : " if st.session_state.language == "fr" else "FAIR sheet status unavailable: ") + str(fair_status_error))
+    
+                st.subheader("FAIR – Sample")
+                fair_path = record.get("fair_path") or fair_remote_path(record)
+                st.caption(("Classeur FAIR : " if st.session_state.language == "fr" else "FAIR workbook: ") + fair_path)
+                fair_col1, fair_col2 = st.columns(2)
+                with fair_col1:
+                    if st.button("Créer / vérifier le classeur FAIR" if st.session_state.language == "fr" else "Create / check FAIR workbook", key=f"fair_create_{selected_id}"):
+                        try:
+                            fair_wb = load_fair_workbook(record); save_fair_workbook(record, fair_wb); save_metadata(records)
+                            st.success("Classeur FAIR disponible." if st.session_state.language == "fr" else "FAIR workbook is available.")
+                        except Exception as exc: st.error(str(exc))
+                with fair_col2:
+                    if st.button("Demander le remplissage FAIR" if st.session_state.language == "fr" else "Request FAIR completion", key=f"fair_request_{selected_id}"):
+                        try:
+                            if not record.get("fair_token"): record["fair_token"] = uuid.uuid4().hex
+                            app_url = str(get_secret("APP_BASE_URL", "")).strip().rstrip("/")
+                            if not app_url:
+                                st.warning("Ajoutez APP_BASE_URL dans les secrets Streamlit pour générer le lien sécurisé." if st.session_state.language == "fr" else "Add APP_BASE_URL to Streamlit secrets to generate the secure link.")
+                            else:
+                                link = f"{app_url}/?fair_token={record['fair_token']}"
+                                subject = "Compléter les métadonnées FAIR – " + record.get("project_name", "")
+                                if st.session_state.language == "fr":
+                                    body = (
+                                        "Bonjour " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
+                                        "Merci de compléter les métadonnées FAIR de votre demande.\n"
+                                        "Référence de votre demande : " + str(record.get("id", "")) + "\n"
+                                        "Vous pouvez ouvrir l'application, choisir le menu FAIR, puis saisir cette référence et votre adresse e-mail de demandeur.\n\n"
+                                        "Accès direct sécurisé :\n" + link
+                                    )
+                                else:
+                                    body = (
+                                        "Hello " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
+                                        "Please complete the FAIR metadata for your request.\n"
+                                        "Your request reference: " + str(record.get("id", "")) + "\n"
+                                        "Open the application, select the FAIR menu, then enter this reference and your requester email address.\n\n"
+                                        "Secure direct access: \n" + link
+                                    )
+                                send_email(record.get("manager_email", ""), subject, body)
+                                record["fair_status"] = "requested"; record["fair_requested_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                                save_metadata(records)
+                                st.success("Demande FAIR envoyée." if st.session_state.language == "fr" else "FAIR completion request sent.")
+                        except Exception as exc: st.error(str(exc))
+                try:
+                    fair_wb = load_fair_workbook(record); fair_ws = fair_wb["Sample"]; fair_rows = sample_rows(fair_ws)
+                    tube_row = fair_rows.get("ID tube analyse", 11)
+                    sample_count = sum(1 for c in range(2, fair_ws.max_column+1) if fair_ws.cell(tube_row,c).value not in (None,""))
+                    st.caption((f"{sample_count} échantillon(s) enregistré(s)" if st.session_state.language == "fr" else f"{sample_count} sample(s) recorded"))
+                    with st.expander("Importer les File IDs administrateur" if st.session_state.language == "fr" else "Import administrator File IDs"):
+                        admin_upload = st.file_uploader("Excel / CSV", type=["xlsx","xlsm","csv","tsv"], key=f"fair_admin_upload_{selected_id}")
+                        if admin_upload and st.button("Mettre à jour les File IDs" if st.session_state.language == "fr" else "Update File IDs", key=f"fair_admin_save_{selected_id}"):
+                            try:
+                                admin_samples = parse_sample_upload(admin_upload)
+                                existing_ids = {str(fair_ws.cell(tube_row,c).value).strip() for c in range(2,fair_ws.max_column+1) if fair_ws.cell(tube_row,c).value not in (None,"")}
+                                unknown = [str(x.get("ID tube analyse", "")).strip() for x in admin_samples if str(x.get("ID tube analyse", "")).strip() not in existing_ids]
+                                if unknown: raise ValueError("ID tube inconnu(s) : " + ", ".join(unknown))
+                                admin_only_rows = [{k: v for k, v in item.items() if k in {"ID tube analyse", "File ID Q-Tof ESI+", "File ID Q-Tof ESI-"}} for item in admin_samples]
+                                fair_merge_samples(fair_ws, admin_only_rows, requester=False); save_fair_workbook(record, fair_wb); save_metadata(records)
+                                st.success("File IDs mis à jour." if st.session_state.language == "fr" else "File IDs updated.")
+                            except Exception as exc: st.error(str(exc))
+                except Exception as exc: st.warning(str(exc))
+    
+                # Signed quotation management: the file is stored separately from request documents.
+                quote_signed_label = "Devis signé" if st.session_state.language == "fr" else "Quotation signed"
+                quote_upload_label = "Importer le devis signé (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload signed quotation (PDF, DOC or DOCX)"
+                quote_save_label = "Enregistrer le statut et le devis" if st.session_state.language == "fr" else "Save status and quotation"
+                existing_quote_path = record.get("signed_quote_path", "")
+                with st.form(f"signed_quote_form_{selected_id}"):
+                    quote_signed = st.checkbox(
+                        quote_signed_label,
+                        value=bool(record.get("quote_signed", False)),
+                    )
+                    quote_file = st.file_uploader(
+                        quote_upload_label,
+                        type=["pdf", "doc", "docx"],
+                        key=f"signed_quote_upload_{selected_id}",
+                    )
+                    if existing_quote_path:
+                        st.caption(
+                            ("Devis déjà déposé : " if st.session_state.language == "fr" else "Quotation already uploaded: ")
+                            + existing_quote_path
+                        )
+                    save_quote = st.form_submit_button(quote_save_label)
+                if save_quote:
+                    if quote_signed and not (quote_file or existing_quote_path):
+                        st.warning(
+                            "Coche le statut uniquement après avoir importé le devis signé."
+                            if st.session_state.language == "fr"
+                            else "Upload the signed quotation before marking it as signed."
+                        )
+                    else:
+                        try:
+                            new_quote_path = existing_quote_path
+                            if quote_file is not None:
+                                ensure_remote_folder("MyDrive")
+                                ensure_remote_folder("MyDrive/Devis_Signes")
+                                safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(quote_file.name)).strip("-")
+                                safe_original = safe_original or "devis-signe"
+                                new_quote_path = f"MyDrive/Devis_Signes/{selected_id}_{safe_original}"
+                                quote_response = webdav_request("PUT", new_quote_path, data=quote_file.getvalue())
+                                quote_response.raise_for_status()
+                            record["quote_signed"] = bool(quote_signed)
+                            record["signed_quote_path"] = new_quote_path
+                            record["signed_quote_filename"] = quote_file.name if quote_file is not None else record.get("signed_quote_filename", "")
+                            record["quote_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                            save_metadata(records)
+                            st.success(
+                                "Statut du devis enregistré dans Nextcloud."
+                                if st.session_state.language == "fr"
+                                else "Quotation status saved to Nextcloud."
+                            )
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(
+                                f"Impossible d'enregistrer le devis : {exc}"
+                                if st.session_state.language == "fr"
+                                else f"Could not save quotation: {exc}"
+                            )
+                status_options = ["pending", "accepted", "refused"]
+                status_display = [t("status_pending"), t("status_accepted"), t("status_refused")]
+                current_status = record.get("status", "pending")
+                current_index = status_options.index(current_status) if current_status in status_options else 0
+                with st.form("decision_form"):
+                    new_status = st.selectbox(t("status"), status_options, index=current_index,
+                        format_func=lambda x: status_display[status_options.index(x)])
+                    comment = st.text_area(t("comment"), value=record.get("admin_comment", ""))
+                    save = st.form_submit_button(t("save_decision"))
+                if save:
+                    record["status"] = new_status
+                    record["admin_comment"] = comment.strip()
+                    record["decision_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
                     try:
                         save_metadata(records)
-                        st.success("Opérateur et adresse e-mail enregistrés pour cette demande." if st.session_state.language == "fr" else "Operator and email address saved for this request.")
-                        st.rerun()
                     except Exception as exc:
                         st.error(f"{t('cloud_error')} {exc}")
-
-            stored_type = record.get("analysis_type", "")
-            shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
-            admin_analysis_items = record.get("analysis_items") or [{"analysis_type": stored_type, "analysis_mode": record.get("analysis_mode", ""), "sample_count": record.get("sample_count", 1), "analysis_details": record.get("analysis_details", "")}]
-            for analysis_number, analysis in enumerate(admin_analysis_items, 1):
-                raw_type = analysis.get("analysis_type", "")
-                display_type = raw_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(raw_type, ANALYSIS_TYPES_EN.get(raw_type, raw_type))
-                st.write(f"**Analyse {analysis_number if st.session_state.language == 'fr' else 'Analysis ' + str(analysis_number)} :** {display_type} — {analysis.get('sample_count', 1)} échantillon(s)")
-                if analysis.get("analysis_mode"):
-                    st.caption(f"{t('analysis_mode')} : {analysis.get('analysis_mode')}")
-                if analysis.get("analysis_details"):
-                    st.caption(f"{t('specific_development_details')} : {analysis.get('analysis_details')}")
-            st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
-            request_status = record.get("status", "pending")
-            request_status_labels = {
-                "pending": t("status_pending"),
-                "accepted": t("status_accepted"),
-                "refused": t("status_refused"),
-            }
-            status_label = "Statut de la demande" if st.session_state.language == "fr" else "Request status"
-            st.write(f"**{status_label} :** {request_status_labels.get(request_status, request_status or '—')}")
-            operator_status_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
-            operator_status_value = record.get("assigned_operator", "").strip() or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
-            st.write(f"**{operator_status_label} :** {operator_status_value}")
-            quotation_imported = bool(record.get("signed_quote_path"))
-            quotation_label = "Devis importé" if st.session_state.language == "fr" else "Quotation uploaded"
-            quotation_value = ("Oui" if st.session_state.language == "fr" else "Yes") if quotation_imported else ("Non" if st.session_state.language == "fr" else "No")
-            st.write(f"**{quotation_label} :** {quotation_value}")
-
-            fair_status_heading = "État des feuilles FAIR" if st.session_state.language == "fr" else "FAIR sheet completion"
-            st.markdown(f"**{fair_status_heading}**")
-            try:
-                sheet_statuses = fair_sheet_completion_status(record)
-                sheet_names_fr = {
-                    "Sample": "Sample",
-                    "Analysis": "Analysis",
-                    "Data treatment": "Data treatment",
-                    "Pipeline Step by Step": "Pipeline Step by Step",
-                }
-                for sheet_name, has_content in sheet_statuses.items():
-                    sheet_label = sheet_names_fr[sheet_name]
-                    if st.session_state.language == "fr":
-                        state_text = "Données saisies" if has_content else "Non renseignée"
-                    else:
-                        state_text = "Data entered" if has_content else "Not completed"
-                    st.write(f"- **{sheet_label} :** {state_text}")
-            except Exception as fair_status_error:
-                st.caption(("État des feuilles FAIR indisponible : " if st.session_state.language == "fr" else "FAIR sheet status unavailable: ") + str(fair_status_error))
-
-            st.subheader("FAIR – Sample")
-            fair_path = record.get("fair_path") or fair_remote_path(record)
-            st.caption(("Classeur FAIR : " if st.session_state.language == "fr" else "FAIR workbook: ") + fair_path)
-            fair_col1, fair_col2 = st.columns(2)
-            with fair_col1:
-                if st.button("Créer / vérifier le classeur FAIR" if st.session_state.language == "fr" else "Create / check FAIR workbook", key=f"fair_create_{selected_id}"):
-                    try:
-                        fair_wb = load_fair_workbook(record); save_fair_workbook(record, fair_wb); save_metadata(records)
-                        st.success("Classeur FAIR disponible." if st.session_state.language == "fr" else "FAIR workbook is available.")
-                    except Exception as exc: st.error(str(exc))
-            with fair_col2:
-                if st.button("Demander le remplissage FAIR" if st.session_state.language == "fr" else "Request FAIR completion", key=f"fair_request_{selected_id}"):
-                    try:
-                        if not record.get("fair_token"): record["fair_token"] = uuid.uuid4().hex
-                        app_url = str(get_secret("APP_BASE_URL", "")).strip().rstrip("/")
-                        if not app_url:
-                            st.warning("Ajoutez APP_BASE_URL dans les secrets Streamlit pour générer le lien sécurisé." if st.session_state.language == "fr" else "Add APP_BASE_URL to Streamlit secrets to generate the secure link.")
-                        else:
-                            link = f"{app_url}/?fair_token={record['fair_token']}"
-                            subject = "Compléter les métadonnées FAIR – " + record.get("project_name", "")
-                            if st.session_state.language == "fr":
-                                body = (
-                                    "Bonjour " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
-                                    "Merci de compléter les métadonnées FAIR de votre demande.\n"
-                                    "Référence de votre demande : " + str(record.get("id", "")) + "\n"
-                                    "Vous pouvez ouvrir l'application, choisir le menu FAIR, puis saisir cette référence et votre adresse e-mail de demandeur.\n\n"
-                                    "Accès direct sécurisé :\n" + link
-                                )
-                            else:
-                                body = (
-                                    "Hello " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
-                                    "Please complete the FAIR metadata for your request.\n"
-                                    "Your request reference: " + str(record.get("id", "")) + "\n"
-                                    "Open the application, select the FAIR menu, then enter this reference and your requester email address.\n\n"
-                                    "Secure direct access: \n" + link
-                                )
-                            send_email(record.get("manager_email", ""), subject, body)
-                            record["fair_status"] = "requested"; record["fair_requested_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-                            save_metadata(records)
-                            st.success("Demande FAIR envoyée." if st.session_state.language == "fr" else "FAIR completion request sent.")
-                    except Exception as exc: st.error(str(exc))
-            try:
-                fair_wb = load_fair_workbook(record); fair_ws = fair_wb["Sample"]; fair_rows = sample_rows(fair_ws)
-                tube_row = fair_rows.get("ID tube analyse", 11)
-                sample_count = sum(1 for c in range(2, fair_ws.max_column+1) if fair_ws.cell(tube_row,c).value not in (None,""))
-                st.caption((f"{sample_count} échantillon(s) enregistré(s)" if st.session_state.language == "fr" else f"{sample_count} sample(s) recorded"))
-                with st.expander("Importer les File IDs administrateur" if st.session_state.language == "fr" else "Import administrator File IDs"):
-                    admin_upload = st.file_uploader("Excel / CSV", type=["xlsx","xlsm","csv","tsv"], key=f"fair_admin_upload_{selected_id}")
-                    if admin_upload and st.button("Mettre à jour les File IDs" if st.session_state.language == "fr" else "Update File IDs", key=f"fair_admin_save_{selected_id}"):
+                        return
+                    email = record.get("manager_email", "").strip()
+                    if new_status == "pending":
+                        st.info(t("pending_no_notification"))
+                    elif email:
                         try:
-                            admin_samples = parse_sample_upload(admin_upload)
-                            existing_ids = {str(fair_ws.cell(tube_row,c).value).strip() for c in range(2,fair_ws.max_column+1) if fair_ws.cell(tube_row,c).value not in (None,"")}
-                            unknown = [str(x.get("ID tube analyse", "")).strip() for x in admin_samples if str(x.get("ID tube analyse", "")).strip() not in existing_ids]
-                            if unknown: raise ValueError("ID tube inconnu(s) : " + ", ".join(unknown))
-                            admin_only_rows = [{k: v for k, v in item.items() if k in {"ID tube analyse", "File ID Q-Tof ESI+", "File ID Q-Tof ESI-"}} for item in admin_samples]
-                            fair_merge_samples(fair_ws, admin_only_rows, requester=False); save_fair_workbook(record, fair_wb); save_metadata(records)
-                            st.success("File IDs mis à jour." if st.session_state.language == "fr" else "File IDs updated.")
-                        except Exception as exc: st.error(str(exc))
-            except Exception as exc: st.warning(str(exc))
-
-            # Signed quotation management: the file is stored separately from request documents.
-            quote_signed_label = "Devis signé" if st.session_state.language == "fr" else "Quotation signed"
-            quote_upload_label = "Importer le devis signé (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload signed quotation (PDF, DOC or DOCX)"
-            quote_save_label = "Enregistrer le statut et le devis" if st.session_state.language == "fr" else "Save status and quotation"
-            existing_quote_path = record.get("signed_quote_path", "")
-            with st.form(f"signed_quote_form_{selected_id}"):
-                quote_signed = st.checkbox(
-                    quote_signed_label,
-                    value=bool(record.get("quote_signed", False)),
-                )
-                quote_file = st.file_uploader(
-                    quote_upload_label,
-                    type=["pdf", "doc", "docx"],
-                    key=f"signed_quote_upload_{selected_id}",
-                )
-                if existing_quote_path:
-                    st.caption(
-                        ("Devis déjà déposé : " if st.session_state.language == "fr" else "Quotation already uploaded: ")
-                        + existing_quote_path
-                    )
-                save_quote = st.form_submit_button(quote_save_label)
-            if save_quote:
-                if quote_signed and not (quote_file or existing_quote_path):
-                    st.warning(
-                        "Coche le statut uniquement après avoir importé le devis signé."
-                        if st.session_state.language == "fr"
-                        else "Upload the signed quotation before marking it as signed."
-                    )
-                else:
+                            # On acceptance, enrich the requester notification with the
+                            # request details and the applicable catalogue price.
+                            recipients_settings = load_notification_settings()
+                            cc_addresses = [record.get("admin_email", ""), record.get("platform_staff_email", "")]
+                            if new_status == "accepted":
+                                cc_addresses.append(recipients_settings.get("ijpb_admin_email", ""))
+                                cc_addresses.append(record.get("assigned_operator_email", ""))
+                                visibility = str(record.get("visibility", "Public (IJPB)") or "Public (IJPB)")
+                                analysis_items = record.get("analysis_items") or [{
+                                    "analysis_type": record.get("analysis_type", ""),
+                                    "analysis_mode": record.get("analysis_mode", ""),
+                                    "sample_count": record.get("sample_count", 1),
+                                }]
+                                catalog = {
+                                    normalize_analysis_type_name(str(x.get("type", ""))): x
+                                    for x in recipients_settings.get("analysis_catalog", []) if isinstance(x, dict)
+                                }
+                                price_key = {"Privée": "private_price", "Public": "public_price", "Public (IJPB)": "inrae_public_price"}.get(visibility)
+                                total_price = 0.0
+                                price_complete = True
+                                details_fr, details_en = [], []
+                                for analysis in analysis_items:
+                                    atype = str(analysis.get("analysis_type", ""))
+                                    mode = str(analysis.get("analysis_mode", "") or "")
+                                    count = max(1, int(analysis.get("sample_count", 1) or 1))
+                                    multiplier = 2 if mode in ("Split/Splitless", "ESI+/-") else 1
+                                    entry = catalog.get(normalize_analysis_type_name(atype), {})
+                                    raw = entry.get(price_key) if price_key else None
+                                    try:
+                                        unit = float(str(raw).strip().replace(" ", "").replace(",", ".").replace("€", "")) if raw not in (None, "") else None
+                                    except (TypeError, ValueError):
+                                        unit = None
+                                    if unit is None:
+                                        price_complete = False
+                                    else:
+                                        total_price += unit * count * multiplier
+                                    details_fr.append(f"- {atype} | {count} échantillon(s) | {mode or 'Mode non précisé'}")
+                                    details_en.append(f"- {atype} | {count} sample(s) | {mode or 'Mode not specified'}")
+                                sample_count = sum(max(1, int(x.get("sample_count", 1) or 1)) for x in analysis_items)
+                                analysis_details_fr = "\n".join(details_fr)
+                                analysis_details_en = "\n".join(details_en)
+                                price_text_fr = f"{total_price:.2f} €" if price_complete else "Indisponible : au moins un tarif manque dans le catalogue."
+                                price_text_en = f"€{total_price:.2f}" if price_complete else "Unavailable: at least one catalog price is missing."
+                                if visibility in ("Public", "Privée"):
+                                    quote_followup_fr = "Un devis détaillé vous sera envoyé prochainement."
+                                    quote_followup_en = "A detailed quotation will be sent to you shortly."
+                                else:
+                                    quote_followup_fr = ""
+                                    quote_followup_en = ""
+    
+                                disclaimer_fr = "Le prix indiqué est donné à titre indicatif. Seul le devis signé fait foi."
+                                disclaimer_en = "The displayed price is indicative only. Only the signed quotation is authoritative."
+    
+                                if st.session_state.language == "fr":
+                                    body = (
+                                        f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
+                                        f"Votre demande d'analyse a été acceptée.\n\n"
+                                        f"Référence de la demande : {record.get('id', '')}\n"
+                                        f"Nombre d'échantillons : {sample_count}\n"
+                                        f"Analyses demandées :\n{analysis_details_fr}\n"
+                                        f"Type de laboratoire : {visibility}\n"
+                                        f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\\n"
+                                        f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n"
+                                        f"{quote_followup_fr}\n"
+                                        f"{disclaimer_fr}\n\n"
+                                        f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\n\n"
+                                        "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
+                                    )
+                                else:
+                                    body = (
+                                        f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
+                                        "Your analysis request has been accepted.\n\n"
+                                        f"Request reference: {record.get('id', '')}\n"
+                                        f"Number of samples: {sample_count}\n"
+                                        f"Requested analyses:\n{analysis_details_en}\n"
+                                        f"Laboratory type: {visibility}\n"
+                                        f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\\n"
+                                        f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n"
+                                        f"{quote_followup_en}\n"
+                                        f"{disclaimer_en}\n\n"
+                                        f"Comment: {comment.strip() or 'No comment.'}\n\n"
+                                        "Best regards,\nOV-Chimie-Metabolisme Platform"
+                                    )
+                            else:
+                                body = t("mail_user_body").format(
+                                    manager=record.get("project_manager", ""),
+                                    project=record.get("project_name", ""),
+                                    status=status_display[status_options.index(new_status)],
+                                    comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
+                                )
+                            mail_subject = (
+                                f"Demande d'analyse acceptée – Réf. {record.get('id', '')}"
+                                if new_status == "accepted" and st.session_state.language == "fr"
+                                else f"Analysis request accepted – Ref. {record.get('id', '')}"
+                                if new_status == "accepted"
+                                else t("mail_user_subject")
+                            )
+                            send_email(
+                                email, mail_subject, body,
+                                cc=join_email_recipients(*cc_addresses),
+                            )
+                            st.success(t("decision_saved"))
+                        except Exception as exc:
+                            st.warning(f"{t('decision_saved_no_mail')} {exc}")
+                    else:
+                        st.warning(t("select_email_missing"))
+                    st.rerun()
+    
+                st.divider()
+                archive_label = "Archiver cette demande" if st.session_state.language == "fr" else "Archive this request"
+                if st.button("🗄️ " + archive_label, key=f"archive_{selected_id}"):
+                    record["archived"] = True
+                    record["archived_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
                     try:
-                        new_quote_path = existing_quote_path
-                        if quote_file is not None:
-                            ensure_remote_folder("MyDrive")
-                            ensure_remote_folder("MyDrive/Devis_Signes")
-                            safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(quote_file.name)).strip("-")
-                            safe_original = safe_original or "devis-signe"
-                            new_quote_path = f"MyDrive/Devis_Signes/{selected_id}_{safe_original}"
-                            quote_response = webdav_request("PUT", new_quote_path, data=quote_file.getvalue())
-                            quote_response.raise_for_status()
-                        record["quote_signed"] = bool(quote_signed)
-                        record["signed_quote_path"] = new_quote_path
-                        record["signed_quote_filename"] = quote_file.name if quote_file is not None else record.get("signed_quote_filename", "")
-                        record["quote_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
                         save_metadata(records)
-                        st.success(
-                            "Statut du devis enregistré dans Nextcloud."
-                            if st.session_state.language == "fr"
-                            else "Quotation status saved to Nextcloud."
-                        )
+                        st.success("Demande déplacée dans les archives." if st.session_state.language == "fr" else "Request moved to archive.")
                         st.rerun()
                     except Exception as exc:
-                        st.error(
-                            f"Impossible d'enregistrer le devis : {exc}"
-                            if st.session_state.language == "fr"
-                            else f"Could not save quotation: {exc}"
-                        )
-            status_options = ["pending", "accepted", "refused"]
-            status_display = [t("status_pending"), t("status_accepted"), t("status_refused")]
-            current_status = record.get("status", "pending")
-            current_index = status_options.index(current_status) if current_status in status_options else 0
-            with st.form("decision_form"):
-                new_status = st.selectbox(t("status"), status_options, index=current_index,
-                    format_func=lambda x: status_display[status_options.index(x)])
-                comment = st.text_area(t("comment"), value=record.get("admin_comment", ""))
-                save = st.form_submit_button(t("save_decision"))
-            if save:
-                record["status"] = new_status
-                record["admin_comment"] = comment.strip()
-                record["decision_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-                try:
-                    save_metadata(records)
-                except Exception as exc:
-                    st.error(f"{t('cloud_error')} {exc}")
-                    return
-                email = record.get("manager_email", "").strip()
-                if new_status == "pending":
-                    st.info(t("pending_no_notification"))
-                elif email:
+                        record.pop("archived", None)
+                        record.pop("archived_at", None)
+                        st.error(f"{t('cloud_error')} {exc}")
+    
+        with archive_tab:
+            st.metric("Demandes archivées" if st.session_state.language == "fr" else "Archived requests", len(archived_records))
+            if not archived_records:
+                st.info("Aucune demande archivée." if st.session_state.language == "fr" else "No archived requests.")
+            else:
+                archive_options = {
+                    f"{request_display_label(r)} — {r.get('id', '')}": r["id"]
+                    for r in archived_records
+                }
+                archive_label = st.selectbox(
+                    "Sélectionner une demande archivée" if st.session_state.language == "fr" else "Select an archived request",
+                    list(archive_options.keys()), key="archived_request_select"
+                )
+                archived_id = archive_options[archive_label]
+                archived_record = next(r for r in archived_records if r.get("id") == archived_id)
+                st.write(f"**{t('manager')} :** {archived_record.get('project_manager','')}")
+                archived_email = archived_record.get("manager_email", "").strip()
+                if archived_email:
+                    st.markdown(f"**{t('manager_email')} :** [{archived_email}](mailto:{archived_email})")
+                st.write(f"**{t('group')} :** {archived_record.get('group','')}")
+                st.write(f"**{t('project_name')} :** {archived_record.get('project_name','')}")
+                st.write(f"**{t('status')} :** {archived_record.get('status','pending')}")
+                st.write(f"**Archivée le :** {archived_record.get('archived_at','—')}" if st.session_state.language == "fr" else f"**Archived on:** {archived_record.get('archived_at','—')}")
+                st.write(f"**{t('doc_path')} :** `{archived_record.get('document_path','')}`")
+    
+                restore_label = "Restaurer dans les demandes actives" if st.session_state.language == "fr" else "Restore to active requests"
+                if st.button("↩️ " + restore_label, key=f"restore_{archived_id}"):
+                    archived_record.pop("archived", None)
+                    archived_record.pop("archived_at", None)
                     try:
-                        # On acceptance, enrich the requester notification with the
-                        # request details and the applicable catalogue price.
-                        recipients_settings = load_notification_settings()
-                        cc_addresses = [record.get("admin_email", ""), record.get("platform_staff_email", "")]
-                        if new_status == "accepted":
-                            cc_addresses.append(recipients_settings.get("ijpb_admin_email", ""))
-                            cc_addresses.append(record.get("assigned_operator_email", ""))
-                            visibility = str(record.get("visibility", "Public (IJPB)") or "Public (IJPB)")
-                            analysis_items = record.get("analysis_items") or [{
-                                "analysis_type": record.get("analysis_type", ""),
-                                "analysis_mode": record.get("analysis_mode", ""),
-                                "sample_count": record.get("sample_count", 1),
-                            }]
-                            catalog = {
-                                normalize_analysis_type_name(str(x.get("type", ""))): x
-                                for x in recipients_settings.get("analysis_catalog", []) if isinstance(x, dict)
-                            }
-                            price_key = {"Privée": "private_price", "Public": "public_price", "Public (IJPB)": "inrae_public_price"}.get(visibility)
-                            total_price = 0.0
-                            price_complete = True
-                            details_fr, details_en = [], []
-                            for analysis in analysis_items:
-                                atype = str(analysis.get("analysis_type", ""))
-                                mode = str(analysis.get("analysis_mode", "") or "")
-                                count = max(1, int(analysis.get("sample_count", 1) or 1))
-                                multiplier = 2 if mode in ("Split/Splitless", "ESI+/-") else 1
-                                entry = catalog.get(normalize_analysis_type_name(atype), {})
-                                raw = entry.get(price_key) if price_key else None
-                                try:
-                                    unit = float(str(raw).strip().replace(" ", "").replace(",", ".").replace("€", "")) if raw not in (None, "") else None
-                                except (TypeError, ValueError):
-                                    unit = None
-                                if unit is None:
-                                    price_complete = False
-                                else:
-                                    total_price += unit * count * multiplier
-                                details_fr.append(f"- {atype} | {count} échantillon(s) | {mode or 'Mode non précisé'}")
-                                details_en.append(f"- {atype} | {count} sample(s) | {mode or 'Mode not specified'}")
-                            sample_count = sum(max(1, int(x.get("sample_count", 1) or 1)) for x in analysis_items)
-                            analysis_details_fr = "\n".join(details_fr)
-                            analysis_details_en = "\n".join(details_en)
-                            price_text_fr = f"{total_price:.2f} €" if price_complete else "Indisponible : au moins un tarif manque dans le catalogue."
-                            price_text_en = f"€{total_price:.2f}" if price_complete else "Unavailable: at least one catalog price is missing."
-                            if visibility in ("Public", "Privée"):
-                                quote_followup_fr = "Un devis détaillé vous sera envoyé prochainement."
-                                quote_followup_en = "A detailed quotation will be sent to you shortly."
-                            else:
-                                quote_followup_fr = ""
-                                quote_followup_en = ""
-
-                            disclaimer_fr = "Le prix indiqué est donné à titre indicatif. Seul le devis signé fait foi."
-                            disclaimer_en = "The displayed price is indicative only. Only the signed quotation is authoritative."
-
-                            if st.session_state.language == "fr":
-                                body = (
-                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
-                                    f"Votre demande d'analyse a été acceptée.\n\n"
-                                    f"Référence de la demande : {record.get('id', '')}\n"
-                                    f"Nombre d'échantillons : {sample_count}\n"
-                                    f"Analyses demandées :\n{analysis_details_fr}\n"
-                                    f"Type de laboratoire : {visibility}\n"
-                                    f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\\n"
-                                    f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n"
-                                    f"{quote_followup_fr}\n"
-                                    f"{disclaimer_fr}\n\n"
-                                    f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\n\n"
-                                    "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
-                                )
-                            else:
-                                body = (
-                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
-                                    "Your analysis request has been accepted.\n\n"
-                                    f"Request reference: {record.get('id', '')}\n"
-                                    f"Number of samples: {sample_count}\n"
-                                    f"Requested analyses:\n{analysis_details_en}\n"
-                                    f"Laboratory type: {visibility}\n"
-                                    f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\\n"
-                                    f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n"
-                                    f"{quote_followup_en}\n"
-                                    f"{disclaimer_en}\n\n"
-                                    f"Comment: {comment.strip() or 'No comment.'}\n\n"
-                                    "Best regards,\nOV-Chimie-Metabolisme Platform"
-                                )
-                        else:
-                            body = t("mail_user_body").format(
-                                manager=record.get("project_manager", ""),
-                                project=record.get("project_name", ""),
-                                status=status_display[status_options.index(new_status)],
-                                comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
-                            )
-                        mail_subject = (
-                            f"Demande d'analyse acceptée – Réf. {record.get('id', '')}"
-                            if new_status == "accepted" and st.session_state.language == "fr"
-                            else f"Analysis request accepted – Ref. {record.get('id', '')}"
-                            if new_status == "accepted"
-                            else t("mail_user_subject")
-                        )
-                        send_email(
-                            email, mail_subject, body,
-                            cc=join_email_recipients(*cc_addresses),
-                        )
-                        st.success(t("decision_saved"))
+                        save_metadata(records)
+                        st.success("Demande restaurée." if st.session_state.language == "fr" else "Request restored.")
+                        st.rerun()
                     except Exception as exc:
-                        st.warning(f"{t('decision_saved_no_mail')} {exc}")
-                else:
-                    st.warning(t("select_email_missing"))
-                st.rerun()
-
-            st.divider()
-            archive_label = "Archiver cette demande" if st.session_state.language == "fr" else "Archive this request"
-            if st.button("🗄️ " + archive_label, key=f"archive_{selected_id}"):
-                record["archived"] = True
-                record["archived_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-                try:
-                    save_metadata(records)
-                    st.success("Demande déplacée dans les archives." if st.session_state.language == "fr" else "Request moved to archive.")
-                    st.rerun()
-                except Exception as exc:
-                    record.pop("archived", None)
-                    record.pop("archived_at", None)
-                    st.error(f"{t('cloud_error')} {exc}")
-
-    with archive_tab:
-        st.metric("Demandes archivées" if st.session_state.language == "fr" else "Archived requests", len(archived_records))
-        if not archived_records:
-            st.info("Aucune demande archivée." if st.session_state.language == "fr" else "No archived requests.")
-        else:
-            archive_options = {
-                f"{request_display_label(r)} — {r.get('id', '')}": r["id"]
-                for r in archived_records
-            }
-            archive_label = st.selectbox(
-                "Sélectionner une demande archivée" if st.session_state.language == "fr" else "Select an archived request",
-                list(archive_options.keys()), key="archived_request_select"
-            )
-            archived_id = archive_options[archive_label]
-            archived_record = next(r for r in archived_records if r.get("id") == archived_id)
-            st.write(f"**{t('manager')} :** {archived_record.get('project_manager','')}")
-            archived_email = archived_record.get("manager_email", "").strip()
-            if archived_email:
-                st.markdown(f"**{t('manager_email')} :** [{archived_email}](mailto:{archived_email})")
-            st.write(f"**{t('group')} :** {archived_record.get('group','')}")
-            st.write(f"**{t('project_name')} :** {archived_record.get('project_name','')}")
-            st.write(f"**{t('status')} :** {archived_record.get('status','pending')}")
-            st.write(f"**Archivée le :** {archived_record.get('archived_at','—')}" if st.session_state.language == "fr" else f"**Archived on:** {archived_record.get('archived_at','—')}")
-            st.write(f"**{t('doc_path')} :** `{archived_record.get('document_path','')}`")
-
-            restore_label = "Restaurer dans les demandes actives" if st.session_state.language == "fr" else "Restore to active requests"
-            if st.button("↩️ " + restore_label, key=f"restore_{archived_id}"):
-                archived_record.pop("archived", None)
-                archived_record.pop("archived_at", None)
-                try:
-                    save_metadata(records)
-                    st.success("Demande restaurée." if st.session_state.language == "fr" else "Request restored.")
-                    st.rerun()
-                except Exception as exc:
-                    archived_record["archived"] = True
-                    st.error(f"{t('cloud_error')} {exc}")
-
-            st.divider()
-            confirm_label = "Je confirme la suppression définitive" if st.session_state.language == "fr" else "I confirm permanent deletion"
-            delete_label = "Supprimer définitivement" if st.session_state.language == "fr" else "Delete permanently"
-            confirmed = st.checkbox(confirm_label, key=f"confirm_delete_{archived_id}")
-            if st.button("🗑️ " + delete_label, type="primary", disabled=not confirmed, key=f"delete_{archived_id}"):
-                document_path = archived_record.get("document_path", "")
-                try:
-                    # Delete the associated Word document first. Keep the metadata
-                    # untouched if Nextcloud reports a real deletion error.
-                    if document_path:
-                        delete_response = webdav_request("DELETE", document_path)
-                        if delete_response.status_code not in (200, 202, 204, 404):
-                            delete_response.raise_for_status()
-                    fair_path = archived_record.get("fair_path") or fair_remote_path(archived_record)
-                    fair_delete = webdav_request("DELETE", fair_path)
-                    if fair_delete.status_code not in (200, 202, 204, 404): fair_delete.raise_for_status()
-                    records = [r for r in records if r.get("id") != archived_id]
-                    save_metadata(records)
-                    st.success("Demande et document supprimés définitivement." if st.session_state.language == "fr" else "Request and document permanently deleted.")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Suppression impossible : {exc}" if st.session_state.language == "fr" else f"Deletion failed: {exc}")
-
+                        archived_record["archived"] = True
+                        st.error(f"{t('cloud_error')} {exc}")
+    
+                st.divider()
+                confirm_label = "Je confirme la suppression définitive" if st.session_state.language == "fr" else "I confirm permanent deletion"
+                delete_label = "Supprimer définitivement" if st.session_state.language == "fr" else "Delete permanently"
+                confirmed = st.checkbox(confirm_label, key=f"confirm_delete_{archived_id}")
+                if st.button("🗑️ " + delete_label, type="primary", disabled=not confirmed, key=f"delete_{archived_id}"):
+                    document_path = archived_record.get("document_path", "")
+                    try:
+                        # Delete the associated Word document first. Keep the metadata
+                        # untouched if Nextcloud reports a real deletion error.
+                        if document_path:
+                            delete_response = webdav_request("DELETE", document_path)
+                            if delete_response.status_code not in (200, 202, 204, 404):
+                                delete_response.raise_for_status()
+                        fair_path = archived_record.get("fair_path") or fair_remote_path(archived_record)
+                        fair_delete = webdav_request("DELETE", fair_path)
+                        if fair_delete.status_code not in (200, 202, 204, 404): fair_delete.raise_for_status()
+                        records = [r for r in records if r.get("id") != archived_id]
+                        save_metadata(records)
+                        st.success("Demande et document supprimés définitivement." if st.session_state.language == "fr" else "Request and document permanently deleted.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Suppression impossible : {exc}" if st.session_state.language == "fr" else f"Deletion failed: {exc}")
+    
 def render_form():
     if not os.path.isfile(TEMPLATE_PATH):
         st.error(t("template_missing"))
