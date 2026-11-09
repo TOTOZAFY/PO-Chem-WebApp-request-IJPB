@@ -2341,7 +2341,7 @@ def render_admin():
                     ):
                         clean_name = new_operator_name.strip()
                         clean_email = new_operator_email.strip()
-                        valid_email = bool(re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", clean_email))
+                        valid_email = bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", clean_email))
                         if not clean_name or not valid_email:
                             st.error(
                                 "Renseignez un nom et une adresse e-mail valide."
