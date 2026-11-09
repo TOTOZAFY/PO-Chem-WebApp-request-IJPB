@@ -13,7 +13,7 @@ from urllib.parse import quote
 import requests
 import streamlit as st
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Inches, Pt
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter
