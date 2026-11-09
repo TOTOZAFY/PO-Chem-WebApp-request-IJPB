@@ -2312,7 +2312,7 @@ def render_admin():
                     operator_email_label,
                     value=selected_operator["email"],
                     disabled=True,
-                    key=f"assigned_operator_email_display_{selected_id}",
+                    key=f"assigned_operator_email_display_{selected_id}_{selected_operator['name']}_{selected_operator['email']}",
                 )
                 if st.button(operator_save_label, key=f"save_assigned_operator_{selected_id}"):
                     record["assigned_operator"] = selected_operator["name"]
