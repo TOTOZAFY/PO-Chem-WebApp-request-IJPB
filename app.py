@@ -2367,6 +2367,42 @@ def render_admin():
                             except Exception as exc:
                                 st.error(f"{t('cloud_error')} {exc}")
     
+                with st.expander("Supprimer un opérateur du répertoire" if st.session_state.language == "fr" else "Remove an operator from the directory"):
+                    if operators_directory:
+                        operator_to_remove = st.selectbox(
+                            "Opérateur à supprimer" if st.session_state.language == "fr" else "Operator to remove",
+                            options=operators_directory,
+                            format_func=lambda op: f"{op['name']} — {op['email']}",
+                            key=f"remove_operator_select_{selected_id}",
+                        )
+                        if st.button(
+                            "Supprimer cet opérateur du répertoire" if st.session_state.language == "fr" else "Remove this operator from the directory",
+                            key=f"remove_operator_directory_{selected_id}",
+                        ):
+                            try:
+                                operators_directory = [
+                                    op for op in operators_directory
+                                    if not (
+                                        op["name"].casefold() == operator_to_remove["name"].casefold()
+                                        and op["email"].casefold() == operator_to_remove["email"].casefold()
+                                    )
+                                ]
+                                save_operators_directory(operators_directory)
+                                st.success(
+                                    "Opérateur supprimé du répertoire. Les demandes déjà affectées à cet opérateur ne sont pas modifiées."
+                                    if st.session_state.language == "fr"
+                                    else "Operator removed from the directory. Existing request assignments are unchanged."
+                                )
+                                st.rerun()
+                            except Exception as exc:
+                                st.error(f"{t('cloud_error')} {exc}")
+                    else:
+                        st.info(
+                            "Aucun opérateur enregistré dans le répertoire."
+                            if st.session_state.language == "fr"
+                            else "No operators are saved in the directory."
+                        )
+
                 stored_type = record.get("analysis_type", "")
                 shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
                 admin_analysis_items = record.get("analysis_items") or [{"analysis_type": stored_type, "analysis_mode": record.get("analysis_mode", ""), "sample_count": record.get("sample_count", 1), "analysis_details": record.get("analysis_details", "")}]
