@@ -2243,35 +2243,19 @@ def render_admin():
                             subject = "Compléter les métadonnées FAIR – " + record.get("project_name", "")
                             if st.session_state.language == "fr":
                                 body = (
-                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\\n\\n"
-                                    "Votre demande d'analyse a été acceptée.\\n\\n"
-                                    f"Référence de la demande : {record.get('id', '')}\\n"
-                                    f"Nombre total d'échantillons : {sample_count}\\n"
-                                    f"Type de laboratoire : {visibility}\\n"
-                                    f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\\n\\n"
-                                    "Analyses demandées :\\n"
-                                    + "\\n\\n".join(details_fr)
-                                    + f"\\n\\nPrix total indicatif : {price_text_fr}\\n"
-                                    + (f"{quote_followup_fr}\\n" if quote_followup_fr else "")
-                                    + f"\\n{disclaimer_fr}\\n\\n"
-                                    + f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\\n\\n"
-                                    + "Cordialement,\\nPlateforme OV-Chimie-Métabolisme"
+                                    "Bonjour " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
+                                    "Merci de compléter les métadonnées FAIR de votre demande.\n"
+                                    "Référence de votre demande : " + str(record.get("id", "")) + "\n"
+                                    "Vous pouvez ouvrir l'application, choisir le menu FAIR, puis saisir cette référence et votre adresse e-mail de demandeur.\n\n"
+                                    "Accès direct sécurisé :\n" + link
                                 )
                             else:
                                 body = (
-                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\\n\\n"
-                                    "Your analysis request has been accepted.\\n\\n"
-                                    f"Request reference: {record.get('id', '')}\\n"
-                                    f"Total number of samples: {sample_count}\\n"
-                                    f"Laboratory type: {visibility}\\n"
-                                    f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\\n\\n"
-                                    "Requested analyses:\\n"
-                                    + "\\n\\n".join(details_en)
-                                    + f"\\n\\nIndicative total price: {price_text_en}\\n"
-                                    + (f"{quote_followup_en}\\n" if quote_followup_en else "")
-                                    + f"\\n{disclaimer_en}\\n\\n"
-                                    + f"Comment: {comment.strip() or 'No comment.'}\\n\\n"
-                                    + "Best regards,\\nPO Chemistry-Metabolism Platform"
+                                    "Hello " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
+                                    "Please complete the FAIR metadata for your request.\n"
+                                    "Your request reference: " + str(record.get("id", "")) + "\n"
+                                    "Open the application, select the FAIR menu, then enter this reference and your requester email address.\n\n"
+                                    "Secure direct access: \n" + link
                                 )
                             send_email(record.get("manager_email", ""), subject, body)
                             record["fair_status"] = "requested"; record["fair_requested_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -2388,62 +2372,11 @@ def render_admin():
                                 "analysis_mode": record.get("analysis_mode", ""),
                                 "sample_count": record.get("sample_count", 1),
                             }]
-                            # Build a robust lookup from the exact tariff rows saved by
-                            # the interactive administrator table in Nextcloud.
-                            catalog = {}
-                            for catalog_row in recipients_settings.get("analysis_catalog", []):
-                                if not isinstance(catalog_row, dict):
-                                    continue
-                                catalog_type = str(catalog_row.get("type", "")).strip()
-                                if not catalog_type:
-                                    continue
-                                catalog[catalog_type] = catalog_row
-                                catalog[normalize_analysis_type_name(catalog_type)] = catalog_row
-
-                            def get_catalog_tariff(analysis_type, selected_price_key):
-                                requested_type = str(analysis_type or "").strip()
-                                candidate_keys = (
-                                    requested_type,
-                                    normalize_analysis_type_name(requested_type),
-                                )
-                                for candidate in candidate_keys:
-                                    row = catalog.get(candidate)
-                                    if row is not None:
-                                        raw_value = row.get(selected_price_key)
-                                        if raw_value not in (None, ""):
-                                            return raw_value
-                                # Last-resort comparison ignores accents, case and
-                                # repeated whitespace while retaining the full type name.
-                                def comparable(value):
-                                    import unicodedata
-                                    value = unicodedata.normalize("NFKD", str(value or ""))
-                                    value = "".join(ch for ch in value if not unicodedata.combining(ch))
-                                    return " ".join(value.casefold().split())
-                                requested_normalized = {
-                                    comparable(requested_type),
-                                    comparable(normalize_analysis_type_name(requested_type)),
-                                }
-                                for stored_type, row in catalog.items():
-                                    if comparable(stored_type) in requested_normalized:
-                                        raw_value = row.get(selected_price_key)
-                                        if raw_value not in (None, ""):
-                                            return raw_value
-                                return None
-                            # Use the unit price saved in the administrator's interactive tariff table.
-                            # Accept both French display labels and the stable stored values.
-                            normalized_visibility = {
-                                "Privée": "Privée",
-                                "Privee": "Privée",
-                                "Publique": "Public",
-                                "Public": "Public",
-                                "Publique (IJPB)": "Public (IJPB)",
-                                "Public (IJPB)": "Public (IJPB)",
-                            }.get(visibility, visibility)
-                            price_key = {
-                                "Privée": "private_price",
-                                "Public": "public_price",
-                                "Public (IJPB)": "inrae_public_price",
-                            }.get(normalized_visibility)
+                            catalog = {
+                                normalize_analysis_type_name(str(x.get("type", ""))): x
+                                for x in recipients_settings.get("analysis_catalog", []) if isinstance(x, dict)
+                            }
+                            price_key = {"Privée": "private_price", "Public": "public_price", "Public (IJPB)": "inrae_public_price"}.get(visibility)
                             total_price = 0.0
                             price_complete = True
                             details_fr, details_en = [], []
@@ -2452,51 +2385,18 @@ def render_admin():
                                 mode = str(analysis.get("analysis_mode", "") or "")
                                 count = max(1, int(analysis.get("sample_count", 1) or 1))
                                 multiplier = 2 if mode in ("Split/Splitless", "ESI+/-") else 1
-                                raw = get_catalog_tariff(atype, price_key) if price_key else None
+                                entry = catalog.get(normalize_analysis_type_name(atype), {})
+                                raw = entry.get(price_key) if price_key else None
                                 try:
-                                    raw_text = str(raw).strip().replace(" ", "").replace("\\u00a0", "").replace("€", "")
-                                    unit = float(raw_text.replace(",", ".")) if raw not in (None, "") else None
+                                    unit = float(str(raw).strip().replace(" ", "").replace(",", ".").replace("€", "")) if raw not in (None, "") else None
                                 except (TypeError, ValueError):
                                     unit = None
                                 if unit is None:
                                     price_complete = False
-                                    unit_text_fr = "Prix unitaire indisponible"
-                                    unit_text_en = "Unit price unavailable"
-                                    subtotal_text_fr = "Sous-total indisponible"
-                                    subtotal_text_en = "Subtotal unavailable"
                                 else:
-                                    analysis_total = unit * count * multiplier
-                                    total_price += analysis_total
-                                    unit_text_fr = f"Prix unitaire par échantillon : {unit:.2f} €"
-                                    unit_text_en = f"Unit price per sample: €{unit:.2f}"
-                                    subtotal_text_fr = f"Sous-total : {analysis_total:.2f} €"
-                                    subtotal_text_en = f"Subtotal: €{analysis_total:.2f}"
-                                mode_label_fr = (
-                                    "Mode d'injection" if "GC-MS" in atype
-                                    else "Mode d'ionisation" if "LC-HRMS" in atype
-                                    else "Mode analytique"
-                                )
-                                mode_label_en = (
-                                    "Injection mode" if "GC-MS" in atype
-                                    else "Ionization mode" if "LC-HRMS" in atype
-                                    else "Analytical mode"
-                                )
-                                details_fr.append(
-                                    f"Type d'analyse : {atype}\\n"
-                                    f"Nombre d'échantillons : {count}\\n"
-                                    f"{mode_label_fr} : {mode or 'Non précisé'}\\n"
-                                    f"{unit_text_fr}\\n"
-                                    f"Coefficient : {multiplier}\\n"
-                                    f"{subtotal_text_fr}"
-                                )
-                                details_en.append(
-                                    f"Analysis type: {atype}\\n"
-                                    f"Number of samples: {count}\\n"
-                                    f"{mode_label_en}: {mode or 'Not specified'}\\n"
-                                    f"{unit_text_en}\\n"
-                                    f"Multiplier: {multiplier}\\n"
-                                    f"{subtotal_text_en}"
-                                )
+                                    total_price += unit * count * multiplier
+                                details_fr.append(f"- {atype} | {count} échantillon(s) | {mode or 'Mode non précisé'}")
+                                details_en.append(f"- {atype} | {count} sample(s) | {mode or 'Mode not specified'}")
                             sample_count = sum(max(1, int(x.get("sample_count", 1) or 1)) for x in analysis_items)
                             analysis_details_fr = "\n".join(details_fr)
                             analysis_details_en = "\n".join(details_en)
@@ -2514,35 +2414,33 @@ def render_admin():
 
                             if st.session_state.language == "fr":
                                 body = (
-                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\\n\\n"
-                                    "Votre demande d'analyse a été acceptée.\\n\\n"
-                                    f"Référence : {record.get('id', '')}\\n"
-                                    f"Nombre total d'échantillons : {sample_count}\\n"
-                                    f"Type de laboratoire : {visibility}\\n"
-                                    f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\\n\\n"
-                                    "Détail des analyses :\\n"
-                                    + "\\n".join(details_fr)
-                                    + f"\\n\\nPrix total indicatif : {price_text_fr}\\n"
-                                    + (f"{quote_followup_fr}\\n" if quote_followup_fr else "")
-                                    + f"\\n{disclaimer_fr}\\n\\n"
-                                    + f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\\n\\n"
-                                    + "Cordialement,\\nPlateforme OV-Chimie-Métabolisme"
+                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
+                                    f"Votre demande d'analyse a été acceptée.\n\n"
+                                    f"Référence de la demande : {record.get('id', '')}\n"
+                                    f"Nombre d'échantillons : {sample_count}\n"
+                                    f"Analyses demandées :\n{analysis_details_fr}\n"
+                                    f"Type de laboratoire : {visibility}\n"
+                                    f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\\n"
+                                    f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n"
+                                    f"{quote_followup_fr}\n"
+                                    f"{disclaimer_fr}\n\n"
+                                    f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\n\n"
+                                    "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
                                 )
                             else:
                                 body = (
-                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\\n\\n"
-                                    "Your analysis request has been accepted.\\n\\n"
-                                    f"Reference: {record.get('id', '')}\\n"
-                                    f"Total number of samples: {sample_count}\\n"
-                                    f"Laboratory type: {visibility}\\n"
-                                    f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\\n\\n"
-                                    "Analysis details:\\n"
-                                    + "\\n".join(details_en)
-                                    + f"\\n\\nIndicative total price: {price_text_en}\\n"
-                                    + (f"{quote_followup_en}\\n" if quote_followup_en else "")
-                                    + f"\\n{disclaimer_en}\\n\\n"
-                                    + f"Comment: {comment.strip() or 'No comment.'}\\n\\n"
-                                    + "Best regards,\\nOV-Chimie-Metabolisme Platform"
+                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
+                                    "Your analysis request has been accepted.\n\n"
+                                    f"Request reference: {record.get('id', '')}\n"
+                                    f"Number of samples: {sample_count}\n"
+                                    f"Requested analyses:\n{analysis_details_en}\n"
+                                    f"Laboratory type: {visibility}\n"
+                                    f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\\n"
+                                    f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n"
+                                    f"{quote_followup_en}\n"
+                                    f"{disclaimer_en}\n\n"
+                                    f"Comment: {comment.strip() or 'No comment.'}\n\n"
+                                    "Best regards,\nOV-Chimie-Metabolisme Platform"
                                 )
                         else:
                             body = t("mail_user_body").format(
