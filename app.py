@@ -31,11 +31,11 @@ st.set_page_config(
 APP_NAME = "PO-Chem-WebApp-Request"
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "template_E-GES-01.docx")
 FAIR_TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "FAIR_template.xlsx")
-CLOUD_FOLDER = "MyDrive/Demandes_Analyses"
-METADATA_PATH = "MyDrive/demandes_metadata.json"
-NOTIFICATION_SETTINGS_PATH = "MyDrive/notification_settings.json"
-USER_PROFILES_PATH = "MyDrive/user_profiles.json"
-OPERATORS_PATH = "MyDrive/operators_directory.json"
+CLOUD_FOLDER = "OV-Chimie/Demandes_Analyses"
+METADATA_PATH = "OV-Chimie/demandes_metadata.json"
+NOTIFICATION_SETTINGS_PATH = "OV-Chimie/notification_settings.json"
+USER_PROFILES_PATH = "OV-Chimie/user_profiles.json"
+OPERATORS_PATH = "OV-Chimie/operators_directory.json"
 FAIR_FOLDER = CLOUD_FOLDER
 DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
 ANALYSIS_TYPES = [
@@ -2539,10 +2539,10 @@ def render_admin():
                     save_unsigned_quote = st.form_submit_button(unsigned_save_label)
                 if save_unsigned_quote and unsigned_quote_file is not None:
                     try:
-                        ensure_remote_folder("MyDrive")
-                        ensure_remote_folder("MyDrive/Devis_Non_Signes")
+                        ensure_remote_folder("OV-Chimie")
+                        ensure_remote_folder("OV-Chimie/Devis_Non_Signes")
                         safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(unsigned_quote_file.name)).strip("-") or "devis-non-signe"
-                        new_unsigned_path = f"MyDrive/Devis_Non_Signes/{selected_id}_{safe_original}"
+                        new_unsigned_path = f"OV-Chimie/Devis_Non_Signes/{selected_id}_{safe_original}"
                         upload_response = webdav_request("PUT", new_unsigned_path, data=unsigned_quote_file.getvalue())
                         upload_response.raise_for_status()
                         record["unsigned_quote_path"] = new_unsigned_path
@@ -2588,11 +2588,11 @@ def render_admin():
                         try:
                             new_quote_path = existing_quote_path
                             if quote_file is not None:
-                                ensure_remote_folder("MyDrive")
-                                ensure_remote_folder("MyDrive/Devis_Signes")
+                                ensure_remote_folder("OV-Chimie")
+                                ensure_remote_folder("OV-Chimie/Devis_Signes")
                                 safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(quote_file.name)).strip("-")
                                 safe_original = safe_original or "devis-signe"
-                                new_quote_path = f"MyDrive/Devis_Signes/{selected_id}_{safe_original}"
+                                new_quote_path = f"OV-Chimie/Devis_Signes/{selected_id}_{safe_original}"
                                 quote_response = webdav_request("PUT", new_quote_path, data=quote_file.getvalue())
                                 quote_response.raise_for_status()
                             record["quote_signed"] = bool(quote_signed)
@@ -2679,10 +2679,10 @@ def render_admin():
                                     pending_upload = st.session_state.get(f"pending_purchase_order_{selected_id}", {})
                                     if not pending_upload.get("content"):
                                         raise ValueError("Le fichier du bon de commande n'est plus disponible. Merci de le sélectionner à nouveau.")
-                                    ensure_remote_folder("MyDrive")
-                                    ensure_remote_folder("MyDrive/Bons_Commande")
+                                    ensure_remote_folder("OV-Chimie")
+                                    ensure_remote_folder("OV-Chimie/Bons_Commande")
                                     safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(pending_upload["filename"])).strip("-") or "bon-commande"
-                                    new_purchase_order_path = f"MyDrive/Bons_Commande/{selected_id}_{safe_original}"
+                                    new_purchase_order_path = f"OV-Chimie/Bons_Commande/{selected_id}_{safe_original}"
                                     upload_response = webdav_request("PUT", new_purchase_order_path, data=pending_upload["content"])
                                     upload_response.raise_for_status()
                                     record["purchase_order_path"] = new_purchase_order_path
@@ -3260,8 +3260,8 @@ def render_form():
                 if document_bytes is not None:
                     if st.button(t("submit"), type="primary", use_container_width=True):
                         try:
-                            ensure_remote_folder("MyDrive")
-                            ensure_remote_folder("MyDrive/E-GES-01")
+                            ensure_remote_folder("OV-Chimie")
+                            ensure_remote_folder("OV-Chimie/E-GES-01")
                             ensure_remote_folder(CLOUD_FOLDER)
                             remote_file = f"{CLOUD_FOLDER}/{filename}"
                             upload = webdav_request("PUT", remote_file, data=document_bytes)
