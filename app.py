@@ -1,4 +1,7 @@
 import os
+import shutil
+import subprocess
+import tempfile
 import re
 import ssl
 import smtplib
@@ -98,7 +101,7 @@ TRANSLATIONS = {
         "review": "6. Vérification et soumission", "all_answers": "Afficher toutes les réponses",
         "previous": "← Précédent", "next": "Suivant →", "edit": "← Modifier les réponses",
         "required": "Renseignez au minimum le responsable, son e-mail et le nom du projet.",
-        "submit": "Valider et soumettre la demande", "download": "Télécharger le document Word",
+        "submit": "Valider et soumettre la demande", "download": "Télécharger la demande (PDF)",
         "submitted": "Demande enregistrée dans Nextcloud.",
         "submitted_notified": "Demande enregistrée dans Nextcloud. La notification à l’administrateur a bien été envoyée.",
         "cloud_error": "Le dépôt dans Nextcloud a échoué. La demande n'a pas été enregistrée :",
@@ -163,7 +166,7 @@ TRANSLATIONS = {
         "save_analysis_type_translation": "Enregistrer la traduction",
         "pending_no_notification": "Statut conservé en attente : aucune notification n'est envoyée au demandeur.",
         "template_missing": "Le modèle Word template_E-GES-01.docx est introuvable.",
-        "word_generation_error": "Erreur de génération Word :",
+        "word_generation_error": "Erreur de génération du PDF :",
         "metadata_invalid": "Le fichier de métadonnées Nextcloud n'est pas un JSON valide.",
         "notification_settings_invalid": "Le fichier de configuration des notifications est invalide.",
         "smtp_not_configured": "SMTP n'est pas configuré dans les secrets Streamlit.",
@@ -218,7 +221,7 @@ TRANSLATIONS = {
         "review": "6. Review and submission", "all_answers": "Show all answers",
         "previous": "← Previous", "next": "Next →", "edit": "← Edit answers",
         "required": "Required fields: project manager name, email, laboratory / group, and project name. Please also check the email format.",
-        "submit": "Submit request", "download": "Download Word document",
+        "submit": "Submit request", "download": "Download request (PDF)",
         "submitted": "Request saved to Nextcloud.",
         "submitted_notified": "Request saved to Nextcloud. The administrator notification was sent successfully.",
         "cloud_error": "Uploading to Nextcloud failed. The request was not saved:",
@@ -283,7 +286,7 @@ TRANSLATIONS = {
         "save_analysis_type_translation": "Save translation",
         "pending_no_notification": "Status remains pending: no notification is sent to the requester.",
         "template_missing": "The Word template template_E-GES-01.docx could not be found.",
-        "word_generation_error": "Word generation error:",
+        "word_generation_error": "PDF generation error:",
         "metadata_invalid": "The Nextcloud metadata file is not valid JSON.",
         "notification_settings_invalid": "The notification settings file is invalid.",
         "smtp_not_configured": "SMTP is not configured in Streamlit secrets.",
@@ -702,7 +705,46 @@ def build_document(form_data):
     output = BytesIO()
     doc.save(output)
     output.seek(0)
-    return output.getvalue(), reference + ".docx"
+
+    # Convert the completed request form to PDF for both the web interface
+    # and the Nextcloud archive. LibreOffice is installed through packages.txt.
+    libreoffice = shutil.which("libreoffice") or shutil.which("soffice")
+    if not libreoffice:
+        raise RuntimeError(
+            "Le convertisseur PDF LibreOffice n'est pas installé sur le serveur."
+            if st.session_state.get("language", "fr") == "fr"
+            else "The LibreOffice PDF converter is not installed on the server."
+        )
+    with tempfile.TemporaryDirectory() as temp_dir:
+        docx_path = os.path.join(temp_dir, reference + ".docx")
+        with open(docx_path, "wb") as docx_file:
+            docx_file.write(output.getvalue())
+        result = subprocess.run(
+            [
+                libreoffice,
+                "--headless",
+                "--convert-to", "pdf",
+                "--outdir", temp_dir,
+                docx_path,
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+        pdf_path = os.path.join(temp_dir, reference + ".pdf")
+        if result.returncode != 0 or not os.path.isfile(pdf_path):
+            details = (result.stderr or result.stdout or "").strip()
+            raise RuntimeError(
+                f"Échec de la conversion PDF : {details}"
+                if st.session_state.get("language", "fr") == "fr"
+                else f"PDF conversion failed: {details}"
+            )
+        with open(pdf_path, "rb") as pdf_file:
+            pdf_bytes = pdf_file.read()
+
+    return pdf_bytes, reference + ".pdf"
 
 def fair_filename(record):
     """Keep the request document stem and append the FAIR suffix."""
@@ -2860,7 +2902,7 @@ def render_form():
                     document_bytes, filename = build_document(data)
                     st.download_button(
                         t("download"), data=document_bytes, file_name=filename,
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        mime="application/pdf",
                         use_container_width=True,
                     )
                 except Exception as exc:
@@ -2984,7 +3026,7 @@ def render_form():
         last = st.session_state.last_submission
         st.download_button(
             t("download"), data=last["document"], file_name=last["filename"],
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            mime="application/pdf",
             key="download_after_submit",
         )
 
