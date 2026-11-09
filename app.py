@@ -119,7 +119,6 @@ TRANSLATIONS = {
         "platform_staff_email": "E-mail du personnel de la plateforme (facultatif)",
         "admin_secondary_email": "E-mail secondaire de l’administrateur (CC, facultatif)",
         "ijpb_admin_email": "E-mail du personnel administratif de l’IJPB (CC, facultatif)",
-        "platform_staff_notification_email": "E-mail de notification du personnel de la plateforme (CC, facultatif)",
         "save_notification_settings": "Enregistrer les adresses e-mail",
         "notification_settings_saved": "Adresses de notification enregistrées dans Nextcloud.",
         "select_request": "Sélectionner une demande", "status": "Décision / statut",
@@ -240,7 +239,6 @@ TRANSLATIONS = {
         "platform_staff_email": "Platform staff email (optional)",
         "admin_secondary_email": "Administrator secondary email (CC, optional)",
         "ijpb_admin_email": "IJPB administrative staff email (CC, optional)",
-        "platform_staff_notification_email": "Platform staff notification email (CC, optional)",
         "save_notification_settings": "Save email addresses",
         "notification_settings_saved": "Notification addresses saved to Nextcloud.",
         "select_request": "Select a request", "status": "Decision / status",
@@ -440,7 +438,6 @@ def load_notification_settings():
             "admin_email": DEFAULT_ADMIN_EMAIL,
             "admin_cc_email": "",
             "ijpb_admin_email": "",
-            "platform_staff_notification_email": "",
             "analysis_types": ANALYSIS_TYPES.copy(),
             "analysis_type_translations": ANALYSIS_TYPES_EN.copy(),
         }
@@ -452,7 +449,6 @@ def load_notification_settings():
         "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
         "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
         "ijpb_admin_email": str(settings.get("ijpb_admin_email", "")).strip(),
-        "platform_staff_notification_email": str(settings.get("platform_staff_notification_email", "")).strip(),
         "analysis_types": list(dict.fromkeys(
             ANALYSIS_TYPES + [
                 normalize_analysis_type_name(x)
@@ -1752,10 +1748,6 @@ def render_admin():
             t("ijpb_admin_email"),
             value=notification_settings.get("ijpb_admin_email", ""),
         )
-        platform_staff_notification_email = st.text_input(
-            t("platform_staff_notification_email"),
-            value=notification_settings.get("platform_staff_notification_email", ""),
-        )
         save_recipients = st.form_submit_button(t("save_notification_settings"))
     if save_recipients:
         if not admin_primary.strip():
@@ -1766,7 +1758,6 @@ def render_admin():
                     "admin_email": admin_primary.strip(),
                     "admin_cc_email": admin_secondary.strip(),
                     "ijpb_admin_email": ijpb_admin_email.strip(),
-                    "platform_staff_notification_email": platform_staff_notification_email.strip(),
                     "analysis_types": notification_settings.get("analysis_types", ANALYSIS_TYPES),
                     "analysis_type_translations": notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN),
                     "analysis_catalog": notification_settings.get("analysis_catalog", []),
@@ -1906,7 +1897,6 @@ def render_admin():
             "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
             "admin_cc_email": notification_settings.get("admin_cc_email", ""),
             "ijpb_admin_email": notification_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"),
-            "platform_staff_notification_email": notification_settings.get("platform_staff_notification_email", ""),
             "analysis_types": cleaned_types,
             "analysis_type_translations": cleaned_translations,
             "analysis_catalog": cleaned_catalog,
@@ -2151,92 +2141,6 @@ def render_admin():
             f"{missing_price_count} demande(s) acceptée(s) exclue(s) du calcul car aucun tarif correspondant n'est renseigné."
             if is_fr else
             f"{missing_price_count} accepted request(s) excluded because no matching catalog price is configured."
-        )
-
-    # Confirmed purchase-order amounts: include every non-deleted request
-    # with a validated uploaded purchase order, whether active or archived,
-    # and regardless of its request status.
-    st.subheader("Montants cumulés des bons de commande" if is_fr else "Cumulative purchase order amounts")
-    st.caption(
-        "Cumul de tous les bons de commande importés et validés, demandes actives et archivées, quel que soit leur statut. Le montant correspond au bon de commande et non nécessairement à un paiement encaissé."
-        if is_fr else
-        "Total of all uploaded and validated purchase orders, across active and archived requests and regardless of status. These are purchase-order amounts, not necessarily payments received."
-    )
-    annual_purchase_orders = {}
-    purchase_order_counts = {}
-    missing_purchase_order_date_count = 0
-    for item in records:
-        if item.get("deleted", False):
-            continue
-        raw_amount = item.get("purchase_order_amount")
-        if raw_amount in (None, "") or not item.get("purchase_order_path"):
-            continue
-        try:
-            amount = float(str(raw_amount).replace(" ", "").replace(",", "."))
-        except (TypeError, ValueError):
-            continue
-        if amount <= 0:
-            continue
-        po_date = str(item.get("purchase_order_updated_at", "") or item.get("decision_at", "") or item.get("submitted_at", ""))
-        po_year = po_date[:4]
-        if not po_year.isdigit():
-            missing_purchase_order_date_count += 1
-            continue
-        po_lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
-        po_lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(po_lab_type, po_lab_type)
-        po_category = po_lab_type
-        if po_lab_type == "Public (IJPB)":
-            po_funding = str(item.get("funding", "NO") or "NO").strip().upper()
-            po_category = "Public (IJPB) - funded" if po_funding in ("YES", "OUI", "TRUE", "1") else "Public (IJPB) - not funded"
-        if po_category not in revenue_categories:
-            po_category = "Public"
-        po_totals = annual_purchase_orders.setdefault(po_year, {category: 0.0 for category in revenue_categories})
-        po_totals[po_category] += amount
-        purchase_order_counts[po_year] = purchase_order_counts.get(po_year, 0) + 1
-
-    if annual_purchase_orders:
-        import pandas as pd
-        po_year_col = "Année" if is_fr else "Year"
-        po_total_col = "Total bons de commande (€)" if is_fr else "Total purchase orders (€)"
-        po_category_cols = {category: f"{revenue_labels[category]} (€)" for category in revenue_categories}
-        po_frame = pd.DataFrame([
-            {
-                po_year_col: year,
-                **{po_category_cols[category]: round(amounts[category], 2) for category in revenue_categories},
-                po_total_col: round(sum(amounts.values()), 2),
-            }
-            for year, amounts in sorted(annual_purchase_orders.items())
-        ])
-        st.bar_chart(po_frame.set_index(po_year_col)[list(po_category_cols.values())])
-        st.dataframe(po_frame, use_container_width=True, hide_index=True)
-        po_category_totals = {
-            category: sum(amounts[category] for amounts in annual_purchase_orders.values())
-            for category in revenue_categories
-        }
-        po_metrics = st.columns(4)
-        for column, category in zip(po_metrics, revenue_categories):
-            column.metric(
-                revenue_labels[category],
-                f"{po_category_totals[category]:,.2f} €".replace(",", " "),
-            )
-        po_total = sum(po_category_totals.values())
-        st.metric(
-            "Total cumulé des bons de commande" if is_fr else "Cumulative purchase order total",
-            f"{po_total:,.2f} €".replace(",", " "),
-        )
-        po_count_label = "Bons de commande comptabilisés" if is_fr else "Purchase orders included"
-        st.caption(f"{po_count_label} : {sum(purchase_order_counts.values())}")
-    else:
-        st.info(
-            "Aucun bon de commande importé avec un montant validé et une année identifiable."
-            if is_fr else
-            "No uploaded purchase orders with a validated amount and identifiable year."
-        )
-    if missing_purchase_order_date_count:
-        st.warning(
-            f"{missing_purchase_order_date_count} bon(s) de commande exclu(s) car aucune année d'importation identifiable."
-            if is_fr else
-            f"{missing_purchase_order_date_count} purchase order(s) excluded because no upload year could be identified."
         )
 
     active_tab, archive_tab = st.tabs([
@@ -2825,19 +2729,10 @@ def render_admin():
                             # On acceptance, enrich the requester notification with the
                             # request details and the applicable catalogue price.
                             recipients_settings = load_notification_settings()
-                            # Acceptance recipients are deliberately separated by role:
-                            # requester is the primary recipient; platform staff, IJPB
-                            # administrative staff and the assigned operator are copied.
-                            # The request form may contain a platform contact, while the
-                            # administrator settings contain the platform notification address.
-                            cc_addresses = []
+                            cc_addresses = [record.get("admin_email", ""), record.get("platform_staff_email", "")]
                             if new_status == "accepted":
-                                cc_addresses.extend([
-                                    recipients_settings.get("platform_staff_notification_email", ""),
-                                    record.get("platform_staff_email", ""),
-                                    recipients_settings.get("ijpb_admin_email", ""),
-                                    record.get("assigned_operator_email", ""),
-                                ])
+                                cc_addresses.append(recipients_settings.get("ijpb_admin_email", ""))
+                                cc_addresses.append(record.get("assigned_operator_email", ""))
                                 visibility = str(record.get("visibility", "Public (IJPB)") or "Public (IJPB)")
                                 analysis_items = record.get("analysis_items") or [{
                                     "analysis_type": record.get("analysis_type", ""),
@@ -3418,7 +3313,7 @@ def render_form():
                                 recipients = load_notification_settings()
                                 admin_email = recipients.get("admin_email") or DEFAULT_ADMIN_EMAIL
                                 platform_staff_cc = join_email_recipients(
-                                    recipients.get("platform_staff_notification_email", ""),
+                                    record.get("platform_staff_email", ""),
                                 )
                                 send_email(
                                     admin_email,
