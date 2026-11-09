@@ -2163,15 +2163,49 @@ def render_admin():
                 key=f"assigned_operator_input_{selected_id}",
                 placeholder="Nom de l’opérateur" if st.session_state.language == "fr" else "Operator name",
             )
+            operator_email_label = (
+                "Adresse e-mail de la personne en charge de l’analyse"
+                if st.session_state.language == "fr"
+                else "Email address of the person responsible for the analysis"
+            )
+            operator_email_value = st.text_input(
+                operator_email_label,
+                value=record.get("assigned_operator_email", ""),
+                key=f"assigned_operator_email_input_{selected_id}",
+                placeholder="nom@inrae.fr",
+                help=(
+                    "Cette adresse sera mise en copie de la notification envoyée au demandeur lorsque la demande sera acceptée."
+                    if st.session_state.language == "fr"
+                    else "This address will be copied on the notification sent to the requester when the request is accepted."
+                ),
+            )
+            operator_email_is_valid = (
+                not operator_email_value.strip()
+                or bool(re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", operator_email_value.strip()))
+            )
+            if not operator_email_is_valid:
+                st.warning(
+                    "Veuillez saisir une adresse e-mail valide."
+                    if st.session_state.language == "fr"
+                    else "Please enter a valid email address."
+                )
             if st.button(operator_save_label, key=f"save_assigned_operator_{selected_id}"):
-                record["assigned_operator"] = operator_value.strip()
-                record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if operator_value.strip() else ""
-                try:
-                    save_metadata(records)
-                    st.success("Opérateur enregistré pour cette demande." if st.session_state.language == "fr" else "Operator saved for this request.")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"{t('cloud_error')} {exc}")
+                if not operator_email_is_valid:
+                    st.error(
+                        "L’adresse e-mail de la personne en charge est invalide."
+                        if st.session_state.language == "fr"
+                        else "The responsible person's email address is invalid."
+                    )
+                else:
+                    record["assigned_operator"] = operator_value.strip()
+                    record["assigned_operator_email"] = operator_email_value.strip()
+                    record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if operator_value.strip() else ""
+                    try:
+                        save_metadata(records)
+                        st.success("Opérateur et adresse e-mail enregistrés pour cette demande." if st.session_state.language == "fr" else "Operator and email address saved for this request.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"{t('cloud_error')} {exc}")
 
             stored_type = record.get("analysis_type", "")
             shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
@@ -2366,6 +2400,7 @@ def render_admin():
                         cc_addresses = [record.get("admin_email", ""), record.get("platform_staff_email", "")]
                         if new_status == "accepted":
                             cc_addresses.append(recipients_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"))
+                            cc_addresses.append(record.get("assigned_operator_email", ""))
                             visibility = str(record.get("visibility", "Public (IJPB)") or "Public (IJPB)")
                             analysis_items = record.get("analysis_items") or [{
                                 "analysis_type": record.get("analysis_type", ""),
