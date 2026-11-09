@@ -1713,7 +1713,7 @@ def render_admin():
         )
         ijpb_admin_email = st.text_input(
             t("ijpb_admin_email"),
-            value=notification_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"),
+            value=notification_settings.get("ijpb_admin_email", ""),
         )
         save_recipients = st.form_submit_button(t("save_notification_settings"))
     if save_recipients:
@@ -2441,7 +2441,7 @@ def render_admin():
                         recipients_settings = load_notification_settings()
                         cc_addresses = [record.get("admin_email", ""), record.get("platform_staff_email", "")]
                         if new_status == "accepted":
-                            cc_addresses.append(recipients_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"))
+                            cc_addresses.append(recipients_settings.get("ijpb_admin_email", ""))
                             cc_addresses.append(record.get("assigned_operator_email", ""))
                             visibility = str(record.get("visibility", "Public (IJPB)") or "Public (IJPB)")
                             analysis_items = record.get("analysis_items") or [{
@@ -2964,10 +2964,7 @@ def render_form():
                                 recipients = load_notification_settings()
                                 admin_email = recipients.get("admin_email") or DEFAULT_ADMIN_EMAIL
                                 internal_cc = join_email_recipients(
-                                    recipients.get("admin_cc_email"),
                                     recipients.get("ijpb_admin_email", ""),
-                                    record.get("admin_email", ""),
-                                    record.get("platform_staff_email", ""),
                                 )
                                 send_email(
                                     admin_email,
