@@ -2311,11 +2311,23 @@ def render_admin():
                 operator_status_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
                 operator_status_value = record.get("assigned_operator", "").strip() or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
                 st.write(f"**{operator_status_label} :** {operator_status_value}")
-                quotation_imported = bool(record.get("signed_quote_path"))
-                quotation_label = "Devis importé" if st.session_state.language == "fr" else "Quotation uploaded"
-                quotation_value = ("Oui" if st.session_state.language == "fr" else "Yes") if quotation_imported else ("Non" if st.session_state.language == "fr" else "No")
-                st.write(f"**{quotation_label} :** {quotation_value}")
-    
+                documents_heading = "État des documents" if st.session_state.language == "fr" else "Document status"
+                st.markdown(f"**{documents_heading}**")
+                uploaded_label = "Importé" if st.session_state.language == "fr" else "Uploaded"
+                missing_label = "Non importé" if st.session_state.language == "fr" else "Not uploaded"
+                document_statuses = [
+                    ("Feuille de demande (PDF)" if st.session_state.language == "fr" else "Request form (PDF)", record.get("document_path", "")),
+                    ("Devis non signé" if st.session_state.language == "fr" else "Unsigned quotation", record.get("unsigned_quote_path", "")),
+                    ("Devis signé" if st.session_state.language == "fr" else "Signed quotation", record.get("signed_quote_path", "")),
+                    ("Bon de commande" if st.session_state.language == "fr" else "Purchase order", record.get("purchase_order_path", "")),
+                    ("Classeur FAIR" if st.session_state.language == "fr" else "FAIR workbook", record.get("fair_path", "")),
+                ]
+                for document_label, document_path_value in document_statuses:
+                    document_state = uploaded_label if document_path_value else missing_label
+                    st.write(f"- **{document_label} :** {document_state}")
+                    if document_path_value:
+                        st.caption(os.path.basename(str(document_path_value)))
+
                 fair_status_heading = "État des feuilles FAIR" if st.session_state.language == "fr" else "FAIR sheet completion"
                 st.markdown(f"**{fair_status_heading}**")
                 try:
