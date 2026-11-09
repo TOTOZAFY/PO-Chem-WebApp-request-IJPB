@@ -2853,77 +2853,119 @@ def render_admin():
             if not archived_records:
                 st.info("Aucune demande archivée." if st.session_state.language == "fr" else "No archived requests.")
             else:
-                archive_options = {
-                    f"{request_display_label(r)} — {r.get('id', '')}": r["id"]
-                    for r in archived_records
-                }
-                archive_label = st.selectbox(
-                    "Sélectionner une demande archivée" if st.session_state.language == "fr" else "Select an archived request",
-                    list(archive_options.keys()), key="archived_request_select"
+                archive_search_label = (
+                    "Rechercher dans les archives par nom du responsable, projet ou référence"
+                    if st.session_state.language == "fr"
+                    else "Search archived requests by manager name, project or reference"
                 )
-                archived_id = archive_options[archive_label]
-                archived_record = next(r for r in archived_records if r.get("id") == archived_id)
-                st.write(f"**{t('manager')} :** {archived_record.get('project_manager','')}")
-                archived_email = archived_record.get("manager_email", "").strip()
-                if archived_email:
-                    st.markdown(f"**{t('manager_email')} :** [{archived_email}](mailto:{archived_email})")
-                st.write(f"**{t('group')} :** {archived_record.get('group','')}")
-                st.write(f"**{t('project_name')} :** {archived_record.get('project_name','')}")
-                st.write(f"**{t('status')} :** {archived_record.get('status','pending')}")
-                st.write(f"**Archivée le :** {archived_record.get('archived_at','—')}" if st.session_state.language == "fr" else f"**Archived on:** {archived_record.get('archived_at','—')}")
-                st.write(f"**{t('doc_path')} :** `{archived_record.get('document_path','')}`")
-    
-                restore_label = "Restaurer dans les demandes actives" if st.session_state.language == "fr" else "Restore to active requests"
-                if st.button("↩️ " + restore_label, key=f"restore_{archived_id}"):
-                    archived_record.pop("archived", None)
-                    archived_record.pop("archived_at", None)
-                    try:
-                        save_metadata(records)
-                        st.success("Demande restaurée." if st.session_state.language == "fr" else "Request restored.")
-                        st.rerun()
-                    except Exception as exc:
-                        archived_record["archived"] = True
-                        st.error(f"{t('cloud_error')} {exc}")
-    
-                st.divider()
-                confirm_label = "Je confirme la suppression définitive" if st.session_state.language == "fr" else "I confirm permanent deletion"
-                delete_label = "Supprimer définitivement" if st.session_state.language == "fr" else "Delete permanently"
-                confirmed = st.checkbox(confirm_label, key=f"confirm_delete_{archived_id}")
-                if st.button("🗑️ " + delete_label, type="primary", disabled=not confirmed, key=f"delete_{archived_id}"):
-                    try:
-                        # Delete every document linked to this request before removing
-                        # its metadata. A missing remote file (404) is already deleted.
-                        document_paths = [
-                            archived_record.get("document_path", ""),
-                            archived_record.get("unsigned_quote_path", ""),
-                            archived_record.get("signed_quote_path", ""),
-                            archived_record.get("purchase_order_path", ""),
-                            archived_record.get("fair_path") or fair_remote_path(archived_record),
-                        ]
-                        # Avoid sending duplicate DELETE requests if two fields point
-                        # to the same remote file.
-                        unique_document_paths = list(dict.fromkeys(
-                            str(path).strip() for path in document_paths if path and str(path).strip()
-                        ))
-                        for linked_path in unique_document_paths:
-                            delete_response = webdav_request("DELETE", linked_path)
-                            if delete_response.status_code not in (200, 202, 204, 404):
-                                delete_response.raise_for_status()
+                archive_search_query = st.text_input(
+                    archive_search_label,
+                    key="archived_request_search",
+                    placeholder=(
+                        "Nom du responsable, nom du projet ou référence..."
+                        if st.session_state.language == "fr"
+                        else "Manager name, project name or request reference..."
+                    ),
+                ).strip().casefold()
 
-                        records = [r for r in records if r.get("id") != archived_id]
-                        save_metadata(records)
-                        st.success(
-                            "Demande et tous ses documents associés supprimés définitivement."
-                            if st.session_state.language == "fr"
-                            else "Request and all linked documents permanently deleted."
-                        )
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(
-                            f"Suppression impossible : {exc}"
-                            if st.session_state.language == "fr"
-                            else f"Deletion failed: {exc}"
-                        )
+                archive_options_records = sorted(
+                    archived_records,
+                    key=lambda r: str(r.get("archived_at", r.get("submitted_at", ""))),
+                    reverse=True,
+                )
+                if archive_search_query:
+                    archive_options_records = [
+                        r for r in archive_options_records
+                        if archive_search_query in " ".join([
+                            str(r.get("project_manager", "")),
+                            str(r.get("project_manager_first_name", "")),
+                            str(r.get("project_name", "")),
+                            str(r.get("id", "")),
+                        ]).casefold()
+                    ]
+
+                # Use the same concise label as the active request list:
+                # reference, requester surname, project and laboratory.
+                archive_options = {
+                    request_display_label(r, include_date=False): r["id"]
+                    for r in archive_options_records
+                }
+                if archive_options:
+                    archive_label = st.selectbox(
+                        "Sélectionner une demande archivée" if st.session_state.language == "fr" else "Select an archived request",
+                        list(archive_options.keys()), key="archived_request_select"
+                    )
+                    archived_id = archive_options[archive_label]
+                else:
+                    archived_id = None
+                    st.info(
+                        "Aucune demande archivée ne correspond à votre recherche."
+                        if st.session_state.language == "fr"
+                        else "No archived requests match your search."
+                    )
+                if archived_id is not None:
+                    archived_record = next(r for r in archived_records if r.get("id") == archived_id)
+                    st.write(f"**{t('manager')} :** {archived_record.get('project_manager','')}")
+                    archived_email = archived_record.get("manager_email", "").strip()
+                    if archived_email:
+                        st.markdown(f"**{t('manager_email')} :** [{archived_email}](mailto:{archived_email})")
+                    st.write(f"**{t('group')} :** {archived_record.get('group','')}")
+                    st.write(f"**{t('project_name')} :** {archived_record.get('project_name','')}")
+                    st.write(f"**{t('status')} :** {archived_record.get('status','pending')}")
+                    st.write(f"**Archivée le :** {archived_record.get('archived_at','—')}" if st.session_state.language == "fr" else f"**Archived on:** {archived_record.get('archived_at','—')}")
+                    st.write(f"**{t('doc_path')} :** `{archived_record.get('document_path','')}`")
+    
+                    restore_label = "Restaurer dans les demandes actives" if st.session_state.language == "fr" else "Restore to active requests"
+                    if st.button("↩️ " + restore_label, key=f"restore_{archived_id}"):
+                        archived_record.pop("archived", None)
+                        archived_record.pop("archived_at", None)
+                        try:
+                            save_metadata(records)
+                            st.success("Demande restaurée." if st.session_state.language == "fr" else "Request restored.")
+                            st.rerun()
+                        except Exception as exc:
+                            archived_record["archived"] = True
+                            st.error(f"{t('cloud_error')} {exc}")
+    
+                    st.divider()
+                    confirm_label = "Je confirme la suppression définitive" if st.session_state.language == "fr" else "I confirm permanent deletion"
+                    delete_label = "Supprimer définitivement" if st.session_state.language == "fr" else "Delete permanently"
+                    confirmed = st.checkbox(confirm_label, key=f"confirm_delete_{archived_id}")
+                    if st.button("🗑️ " + delete_label, type="primary", disabled=not confirmed, key=f"delete_{archived_id}"):
+                        try:
+                            # Delete every document linked to this request before removing
+                            # its metadata. A missing remote file (404) is already deleted.
+                            document_paths = [
+                                archived_record.get("document_path", ""),
+                                archived_record.get("unsigned_quote_path", ""),
+                                archived_record.get("signed_quote_path", ""),
+                                archived_record.get("purchase_order_path", ""),
+                                archived_record.get("fair_path") or fair_remote_path(archived_record),
+                            ]
+                            # Avoid sending duplicate DELETE requests if two fields point
+                            # to the same remote file.
+                            unique_document_paths = list(dict.fromkeys(
+                                str(path).strip() for path in document_paths if path and str(path).strip()
+                            ))
+                            for linked_path in unique_document_paths:
+                                delete_response = webdav_request("DELETE", linked_path)
+                                if delete_response.status_code not in (200, 202, 204, 404):
+                                    delete_response.raise_for_status()
+
+                            records = [r for r in records if r.get("id") != archived_id]
+                            save_metadata(records)
+                            st.success(
+                                "Demande et tous ses documents associés supprimés définitivement."
+                                if st.session_state.language == "fr"
+                                else "Request and all linked documents permanently deleted."
+                            )
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(
+                                f"Suppression impossible : {exc}"
+                                if st.session_state.language == "fr"
+                                else f"Deletion failed: {exc}"
+                            )
     
 def render_form():
     if not os.path.isfile(TEMPLATE_PATH):
