@@ -2396,6 +2396,39 @@ def render_admin():
                             except Exception as exc: st.error(str(exc))
                 except Exception as exc: st.warning(str(exc))
     
+                # Unsigned quotation: stored in its own folder, always prefixed with the request reference.
+                unsigned_quote_label = "Devis non signé" if st.session_state.language == "fr" else "Unsigned quotation"
+                unsigned_upload_label = "Importer le devis non signé (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload unsigned quotation (PDF, DOC or DOCX)"
+                unsigned_save_label = "Enregistrer le devis non signé" if st.session_state.language == "fr" else "Save unsigned quotation"
+                existing_unsigned_path = record.get("unsigned_quote_path", "")
+                with st.form(f"unsigned_quote_form_{selected_id}"):
+                    unsigned_quote_file = st.file_uploader(
+                        unsigned_upload_label,
+                        type=["pdf", "doc", "docx"],
+                        key=f"unsigned_quote_upload_{selected_id}",
+                    )
+                    if existing_unsigned_path:
+                        st.caption(("Devis non signé déjà déposé : " if st.session_state.language == "fr" else "Unsigned quotation already uploaded: ") + existing_unsigned_path)
+                    save_unsigned_quote = st.form_submit_button(unsigned_save_label)
+                if save_unsigned_quote and unsigned_quote_file is not None:
+                    try:
+                        ensure_remote_folder("MyDrive")
+                        ensure_remote_folder("MyDrive/Devis_Non_Signes")
+                        safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(unsigned_quote_file.name)).strip("-") or "devis-non-signe"
+                        new_unsigned_path = f"MyDrive/Devis_Non_Signes/{selected_id}_{safe_original}"
+                        upload_response = webdav_request("PUT", new_unsigned_path, data=unsigned_quote_file.getvalue())
+                        upload_response.raise_for_status()
+                        record["unsigned_quote_path"] = new_unsigned_path
+                        record["unsigned_quote_filename"] = unsigned_quote_file.name
+                        record["unsigned_quote_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                        save_metadata(records)
+                        st.success("Devis non signé enregistré." if st.session_state.language == "fr" else "Unsigned quotation saved.")
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(("Impossible d'enregistrer le devis non signé : " if st.session_state.language == "fr" else "Could not save unsigned quotation: ") + str(exc))
+                elif save_unsigned_quote:
+                    st.warning("Sélectionne un fichier avant d'enregistrer." if st.session_state.language == "fr" else "Select a file before saving.")
+
                 # Signed quotation management: the file is stored separately from request documents.
                 quote_signed_label = "Devis signé" if st.session_state.language == "fr" else "Quotation signed"
                 quote_upload_label = "Importer le devis signé (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload signed quotation (PDF, DOC or DOCX)"
@@ -2452,6 +2485,97 @@ def render_admin():
                                 if st.session_state.language == "fr"
                                 else f"Could not save quotation: {exc}"
                             )
+                # Purchase order: upload first, then require manual amount validation in a popup.
+                purchase_order_label = "Bon de commande" if st.session_state.language == "fr" else "Purchase order"
+                purchase_order_upload_label = "Importer le bon de commande (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload purchase order (PDF, DOC or DOCX)"
+                purchase_order_save_label = "Valider l’import du bon de commande" if st.session_state.language == "fr" else "Validate purchase order upload"
+                existing_purchase_order_path = record.get("purchase_order_path", "")
+                with st.form(f"purchase_order_form_{selected_id}"):
+                    purchase_order_file = st.file_uploader(
+                        purchase_order_upload_label,
+                        type=["pdf", "doc", "docx"],
+                        key=f"purchase_order_upload_{selected_id}",
+                    )
+                    if existing_purchase_order_path:
+                        st.caption(("Bon de commande déjà déposé : " if st.session_state.language == "fr" else "Purchase order already uploaded: ") + existing_purchase_order_path)
+                        if record.get("purchase_order_amount") is not None:
+                            st.caption(
+                                (f"Montant enregistré : {float(record['purchase_order_amount']):.2f} €" if st.session_state.language == "fr"
+                                 else f"Recorded amount: €{float(record['purchase_order_amount']):.2f}")
+                            )
+                    save_purchase_order = st.form_submit_button(purchase_order_save_label)
+                if save_purchase_order:
+                    if purchase_order_file is None:
+                        st.warning("Sélectionne un fichier avant de continuer." if st.session_state.language == "fr" else "Select a file before continuing.")
+                    else:
+                        st.session_state[f"pending_purchase_order_{selected_id}"] = {
+                            "filename": purchase_order_file.name,
+                            "content": purchase_order_file.getvalue(),
+                        }
+                        st.session_state[f"show_purchase_order_amount_dialog_{selected_id}"] = True
+                        st.rerun()
+
+                if st.session_state.get(f"show_purchase_order_amount_dialog_{selected_id}", False):
+                    @st.dialog("Validation du bon de commande" if st.session_state.language == "fr" else "Purchase order validation")
+                    def purchase_order_amount_dialog():
+                        st.write(
+                            "Vérifie le montant total exact indiqué sur le bon de commande avant de valider son import."
+                            if st.session_state.language == "fr"
+                            else "Check the exact total amount shown on the purchase order before validating the upload."
+                        )
+                        amount_label = "Montant total exact du bon de commande (€)" if st.session_state.language == "fr" else "Exact purchase order total (€)"
+                        purchase_order_amount = st.number_input(
+                            amount_label,
+                            min_value=0.0,
+                            value=float(record.get("purchase_order_amount") or 0.0),
+                            step=0.01,
+                            format="%.2f",
+                            key=f"purchase_order_amount_input_{selected_id}",
+                        )
+                        confirm_col, cancel_col = st.columns(2)
+                        with confirm_col:
+                            confirm_purchase_order = st.button(
+                                "Confirmer et enregistrer" if st.session_state.language == "fr" else "Confirm and save",
+                                key=f"confirm_purchase_order_{selected_id}",
+                                type="primary",
+                            )
+                        with cancel_col:
+                            cancel_purchase_order = st.button(
+                                "Annuler" if st.session_state.language == "fr" else "Cancel",
+                                key=f"cancel_purchase_order_{selected_id}",
+                            )
+                        if confirm_purchase_order:
+                            if purchase_order_amount <= 0:
+                                st.error("Saisis un montant supérieur à zéro." if st.session_state.language == "fr" else "Enter an amount greater than zero.")
+                            else:
+                                try:
+                                    pending_upload = st.session_state.get(f"pending_purchase_order_{selected_id}", {})
+                                    if not pending_upload.get("content"):
+                                        raise ValueError("Le fichier du bon de commande n'est plus disponible. Merci de le sélectionner à nouveau.")
+                                    ensure_remote_folder("MyDrive")
+                                    ensure_remote_folder("MyDrive/Bons_Commande")
+                                    safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(pending_upload["filename"])).strip("-") or "bon-commande"
+                                    new_purchase_order_path = f"MyDrive/Bons_Commande/{selected_id}_{safe_original}"
+                                    upload_response = webdav_request("PUT", new_purchase_order_path, data=pending_upload["content"])
+                                    upload_response.raise_for_status()
+                                    record["purchase_order_path"] = new_purchase_order_path
+                                    record["purchase_order_filename"] = pending_upload["filename"]
+                                    record["purchase_order_amount"] = round(float(purchase_order_amount), 2)
+                                    record["purchase_order_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                                    save_metadata(records)
+                                    st.session_state.pop(f"pending_purchase_order_{selected_id}", None)
+                                    st.session_state[f"show_purchase_order_amount_dialog_{selected_id}"] = False
+                                    st.success("Bon de commande et montant enregistrés." if st.session_state.language == "fr" else "Purchase order and amount saved.")
+                                    st.rerun()
+                                except Exception as exc:
+                                    st.error(("Impossible d'enregistrer le bon de commande : " if st.session_state.language == "fr" else "Could not save purchase order: ") + str(exc))
+                        if cancel_purchase_order:
+                            st.session_state.pop(f"pending_purchase_order_{selected_id}", None)
+                            st.session_state[f"show_purchase_order_amount_dialog_{selected_id}"] = False
+                            st.rerun()
+
+                    purchase_order_amount_dialog()
+
                 status_options = ["pending", "accepted", "refused"]
                 status_display = [t("status_pending"), t("status_accepted"), t("status_refused")]
                 current_status = record.get("status", "pending")
