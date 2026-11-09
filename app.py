@@ -2299,7 +2299,7 @@ def render_admin():
                     index=current_index,
                     format_func=lambda op: (
                         f"{op['name']} — {op['email']}" if op["name"] else
-                        ("— Aucun opérateur —" if st.session_state.language == "fr" else "— No operator —")
+                        ("Aucun opérateur" if st.session_state.language == "fr" else "No operator")
                     ),
                     key=f"assigned_operator_select_{selected_id}",
                 )
