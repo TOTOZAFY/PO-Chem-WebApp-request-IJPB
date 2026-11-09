@@ -2153,6 +2153,26 @@ def render_admin():
                 st.write(f"**{t('manager_email')} :** —")
             st.write(f"**{t('group')} :** {record.get('group','')}")
             st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
+
+            # Operator assigned to perform the analyses for this request.
+            operator_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
+            operator_save_label = "Enregistrer l’opérateur" if st.session_state.language == "fr" else "Save assigned operator"
+            operator_value = st.text_input(
+                operator_label,
+                value=record.get("assigned_operator", ""),
+                key=f"assigned_operator_input_{selected_id}",
+                placeholder="Nom de l’opérateur" if st.session_state.language == "fr" else "Operator name",
+            )
+            if st.button(operator_save_label, key=f"save_assigned_operator_{selected_id}"):
+                record["assigned_operator"] = operator_value.strip()
+                record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if operator_value.strip() else ""
+                try:
+                    save_metadata(records)
+                    st.success("Opérateur enregistré pour cette demande." if st.session_state.language == "fr" else "Operator saved for this request.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"{t('cloud_error')} {exc}")
+
             stored_type = record.get("analysis_type", "")
             shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
             admin_analysis_items = record.get("analysis_items") or [{"analysis_type": stored_type, "analysis_mode": record.get("analysis_mode", ""), "sample_count": record.get("sample_count", 1), "analysis_details": record.get("analysis_details", "")}]
@@ -2173,6 +2193,9 @@ def render_admin():
             }
             status_label = "Statut de la demande" if st.session_state.language == "fr" else "Request status"
             st.write(f"**{status_label} :** {request_status_labels.get(request_status, request_status or '—')}")
+            operator_status_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
+            operator_status_value = record.get("assigned_operator", "").strip() or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
+            st.write(f"**{operator_status_label} :** {operator_status_value}")
             quotation_imported = bool(record.get("signed_quote_path"))
             quotation_label = "Devis importé" if st.session_state.language == "fr" else "Quotation uploaded"
             quotation_value = ("Oui" if st.session_state.language == "fr" else "Yes") if quotation_imported else ("Non" if st.session_state.language == "fr" else "No")
@@ -2397,6 +2420,7 @@ def render_admin():
                                     f"Nombre d'échantillons : {sample_count}\n"
                                     f"Analyses demandées :\n{analysis_details_fr}\n"
                                     f"Type de laboratoire : {visibility}\n"
+                                    f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\\n"
                                     f"{('Prix total indicatif : ' + price_text_fr) if visibility == 'Public (IJPB)' else price_text_fr}\n"
                                     f"{quote_followup_fr}\n"
                                     f"{disclaimer_fr}\n\n"
@@ -2411,6 +2435,7 @@ def render_admin():
                                     f"Number of samples: {sample_count}\n"
                                     f"Requested analyses:\n{analysis_details_en}\n"
                                     f"Laboratory type: {visibility}\n"
+                                    f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\\n"
                                     f"{('Indicative total price: ' + price_text_en) if visibility == 'Public (IJPB)' else price_text_en}\n"
                                     f"{quote_followup_en}\n"
                                     f"{disclaimer_en}\n\n"
