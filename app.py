@@ -2211,7 +2211,7 @@ def render_admin():
                     ]).casefold()
                 ]
             options = {
-                f"{request_display_label(r)} — {r.get('id', '')}": r["id"]
+                request_display_label(r, include_date=False): r["id"]
                 for r in request_options_records
             }
             if options:
