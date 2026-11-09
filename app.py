@@ -3320,7 +3320,12 @@ def render_form():
                                     t("mail_admin_subject"),
                                     t("mail_admin_body").format(
                                         project=record["project_name"],
-                                        manager=record.get("project_manager_first_name") or record["project_manager"],
+                                        manager=" ".join(
+                                            part for part in (
+                                                record.get("project_manager", ""),
+                                                record.get("project_manager_first_name", ""),
+                                            ) if str(part or "").strip()
+                                        ),
                                         group=record["group"],
                                         analysis_type=" ; ".join(x.get("analysis_type", "") for x in record.get("analysis_items", [])) or record.get("analysis_type", ""),
                                         analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
