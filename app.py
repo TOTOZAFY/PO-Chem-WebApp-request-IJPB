@@ -2243,19 +2243,35 @@ def render_admin():
                             subject = "Compléter les métadonnées FAIR – " + record.get("project_name", "")
                             if st.session_state.language == "fr":
                                 body = (
-                                    "Bonjour " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
-                                    "Merci de compléter les métadonnées FAIR de votre demande.\n"
-                                    "Référence de votre demande : " + str(record.get("id", "")) + "\n"
-                                    "Vous pouvez ouvrir l'application, choisir le menu FAIR, puis saisir cette référence et votre adresse e-mail de demandeur.\n\n"
-                                    "Accès direct sécurisé :\n" + link
+                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\\n\\n"
+                                    "Votre demande d'analyse a été acceptée.\\n\\n"
+                                    f"Référence de la demande : {record.get('id', '')}\\n"
+                                    f"Nombre total d'échantillons : {sample_count}\\n"
+                                    f"Type de laboratoire : {visibility}\\n"
+                                    f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\\n\\n"
+                                    "Analyses demandées :\\n"
+                                    + "\\n\\n".join(details_fr)
+                                    + f"\\n\\nPrix total indicatif : {price_text_fr}\\n"
+                                    + (f"{quote_followup_fr}\\n" if quote_followup_fr else "")
+                                    + f"\\n{disclaimer_fr}\\n\\n"
+                                    + f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\\n\\n"
+                                    + "Cordialement,\\nPlateforme OV-Chimie-Métabolisme"
                                 )
                             else:
                                 body = (
-                                    "Hello " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
-                                    "Please complete the FAIR metadata for your request.\n"
-                                    "Your request reference: " + str(record.get("id", "")) + "\n"
-                                    "Open the application, select the FAIR menu, then enter this reference and your requester email address.\n\n"
-                                    "Secure direct access: \n" + link
+                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\\n\\n"
+                                    "Your analysis request has been accepted.\\n\\n"
+                                    f"Request reference: {record.get('id', '')}\\n"
+                                    f"Total number of samples: {sample_count}\\n"
+                                    f"Laboratory type: {visibility}\\n"
+                                    f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\\n\\n"
+                                    "Requested analyses:\\n"
+                                    + "\\n\\n".join(details_en)
+                                    + f"\\n\\nIndicative total price: {price_text_en}\\n"
+                                    + (f"{quote_followup_en}\\n" if quote_followup_en else "")
+                                    + f"\\n{disclaimer_en}\\n\\n"
+                                    + f"Comment: {comment.strip() or 'No comment.'}\\n\\n"
+                                    + "Best regards,\\nPO Chemistry-Metabolism Platform"
                                 )
                             send_email(record.get("manager_email", ""), subject, body)
                             record["fair_status"] = "requested"; record["fair_requested_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -2455,13 +2471,31 @@ def render_admin():
                                     unit_text_en = f"Unit price per sample: €{unit:.2f}"
                                     subtotal_text_fr = f"Sous-total : {analysis_total:.2f} €"
                                     subtotal_text_en = f"Subtotal: €{analysis_total:.2f}"
+                                mode_label_fr = (
+                                    "Mode d'injection" if "GC-MS" in atype
+                                    else "Mode d'ionisation" if "LC-HRMS" in atype
+                                    else "Mode analytique"
+                                )
+                                mode_label_en = (
+                                    "Injection mode" if "GC-MS" in atype
+                                    else "Ionization mode" if "LC-HRMS" in atype
+                                    else "Analytical mode"
+                                )
                                 details_fr.append(
-                                    f"{atype} | {count} échantillon(s) | {mode or 'Mode non précisé'} | "
-                                    f"{unit_text_fr} | Coefficient : {multiplier} | {subtotal_text_fr}"
+                                    f"Type d'analyse : {atype}\\n"
+                                    f"Nombre d'échantillons : {count}\\n"
+                                    f"{mode_label_fr} : {mode or 'Non précisé'}\\n"
+                                    f"{unit_text_fr}\\n"
+                                    f"Coefficient : {multiplier}\\n"
+                                    f"{subtotal_text_fr}"
                                 )
                                 details_en.append(
-                                    f"{atype} | {count} sample(s) | {mode or 'Mode not specified'} | "
-                                    f"{unit_text_en} | Multiplier: {multiplier} | {subtotal_text_en}"
+                                    f"Analysis type: {atype}\\n"
+                                    f"Number of samples: {count}\\n"
+                                    f"{mode_label_en}: {mode or 'Not specified'}\\n"
+                                    f"{unit_text_en}\\n"
+                                    f"Multiplier: {multiplier}\\n"
+                                    f"{subtotal_text_en}"
                                 )
                             sample_count = sum(max(1, int(x.get("sample_count", 1) or 1)) for x in analysis_items)
                             analysis_details_fr = "\n".join(details_fr)
