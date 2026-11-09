@@ -2372,10 +2372,47 @@ def render_admin():
                                 "analysis_mode": record.get("analysis_mode", ""),
                                 "sample_count": record.get("sample_count", 1),
                             }]
-                            catalog = {
-                                normalize_analysis_type_name(str(x.get("type", ""))): x
-                                for x in recipients_settings.get("analysis_catalog", []) if isinstance(x, dict)
-                            }
+                            # Build a robust lookup from the exact tariff rows saved by
+                            # the interactive administrator table in Nextcloud.
+                            catalog = {}
+                            for catalog_row in recipients_settings.get("analysis_catalog", []):
+                                if not isinstance(catalog_row, dict):
+                                    continue
+                                catalog_type = str(catalog_row.get("type", "")).strip()
+                                if not catalog_type:
+                                    continue
+                                catalog[catalog_type] = catalog_row
+                                catalog[normalize_analysis_type_name(catalog_type)] = catalog_row
+
+                            def get_catalog_tariff(analysis_type, selected_price_key):
+                                requested_type = str(analysis_type or "").strip()
+                                candidate_keys = (
+                                    requested_type,
+                                    normalize_analysis_type_name(requested_type),
+                                )
+                                for candidate in candidate_keys:
+                                    row = catalog.get(candidate)
+                                    if row is not None:
+                                        raw_value = row.get(selected_price_key)
+                                        if raw_value not in (None, ""):
+                                            return raw_value
+                                # Last-resort comparison ignores accents, case and
+                                # repeated whitespace while retaining the full type name.
+                                def comparable(value):
+                                    import unicodedata
+                                    value = unicodedata.normalize("NFKD", str(value or ""))
+                                    value = "".join(ch for ch in value if not unicodedata.combining(ch))
+                                    return " ".join(value.casefold().split())
+                                requested_normalized = {
+                                    comparable(requested_type),
+                                    comparable(normalize_analysis_type_name(requested_type)),
+                                }
+                                for stored_type, row in catalog.items():
+                                    if comparable(stored_type) in requested_normalized:
+                                        raw_value = row.get(selected_price_key)
+                                        if raw_value not in (None, ""):
+                                            return raw_value
+                                return None
                             # Use the unit price saved in the administrator's interactive tariff table.
                             # Accept both French display labels and the stable stored values.
                             normalized_visibility = {
@@ -2399,10 +2436,10 @@ def render_admin():
                                 mode = str(analysis.get("analysis_mode", "") or "")
                                 count = max(1, int(analysis.get("sample_count", 1) or 1))
                                 multiplier = 2 if mode in ("Split/Splitless", "ESI+/-") else 1
-                                entry = catalog.get(normalize_analysis_type_name(atype), {})
-                                raw = entry.get(price_key) if price_key else None
+                                raw = get_catalog_tariff(atype, price_key) if price_key else None
                                 try:
-                                    unit = float(str(raw).strip().replace(" ", "").replace("\\u00a0", "").replace(",", ".").replace("€", "")) if raw not in (None, "") else None
+                                    raw_text = str(raw).strip().replace(" ", "").replace("\\u00a0", "").replace("€", "")
+                                    unit = float(raw_text.replace(",", ".")) if raw not in (None, "") else None
                                 except (TypeError, ValueError):
                                     unit = None
                                 if unit is None:
@@ -2443,33 +2480,35 @@ def render_admin():
 
                             if st.session_state.language == "fr":
                                 body = (
-                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
-                                    f"Votre demande d'analyse a été acceptée.\n\n"
-                                    f"Référence de la demande : {record.get('id', '')}\n"
-                                    f"Nombre total d'échantillons : {sample_count}\n"
-                                    f"Analyses demandées :\n{analysis_details_fr}\n"
-                                    f"Type de laboratoire : {visibility}\n"
-                                    f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\n"
-                                    f"Prix total indicatif : {price_text_fr}\n"
-                                    f"{quote_followup_fr}\n"
-                                    f"{disclaimer_fr}\n\n"
-                                    f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\n\n"
-                                    "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
+                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\\n\\n"
+                                    "Votre demande d'analyse a été acceptée.\\n\\n"
+                                    f"Référence : {record.get('id', '')}\\n"
+                                    f"Nombre total d'échantillons : {sample_count}\\n"
+                                    f"Type de laboratoire : {visibility}\\n"
+                                    f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\\n\\n"
+                                    "Détail des analyses :\\n"
+                                    + "\\n".join(details_fr)
+                                    + f"\\n\\nPrix total indicatif : {price_text_fr}\\n"
+                                    + (f"{quote_followup_fr}\\n" if quote_followup_fr else "")
+                                    + f"\\n{disclaimer_fr}\\n\\n"
+                                    + f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\\n\\n"
+                                    + "Cordialement,\\nPlateforme OV-Chimie-Métabolisme"
                                 )
                             else:
                                 body = (
-                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
-                                    "Your analysis request has been accepted.\n\n"
-                                    f"Request reference: {record.get('id', '')}\n"
-                                    f"Total number of samples: {sample_count}\n"
-                                    f"Requested analyses:\n{analysis_details_en}\n"
-                                    f"Laboratory type: {visibility}\n"
-                                    f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\n"
-                                    f"Indicative total price: {price_text_en}\n"
-                                    f"{quote_followup_en}\n"
-                                    f"{disclaimer_en}\n\n"
-                                    f"Comment: {comment.strip() or 'No comment.'}\n\n"
-                                    "Best regards,\nOV-Chimie-Metabolisme Platform"
+                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\\n\\n"
+                                    "Your analysis request has been accepted.\\n\\n"
+                                    f"Reference: {record.get('id', '')}\\n"
+                                    f"Total number of samples: {sample_count}\\n"
+                                    f"Laboratory type: {visibility}\\n"
+                                    f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\\n\\n"
+                                    "Analysis details:\\n"
+                                    + "\\n".join(details_en)
+                                    + f"\\n\\nIndicative total price: {price_text_en}\\n"
+                                    + (f"{quote_followup_en}\\n" if quote_followup_en else "")
+                                    + f"\\n{disclaimer_en}\\n\\n"
+                                    + f"Comment: {comment.strip() or 'No comment.'}\\n\\n"
+                                    + "Best regards,\\nOV-Chimie-Metabolisme Platform"
                                 )
                         else:
                             body = t("mail_user_body").format(
