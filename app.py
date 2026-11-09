@@ -404,7 +404,7 @@ def load_notification_settings():
         return {
             "admin_email": DEFAULT_ADMIN_EMAIL,
             "admin_cc_email": "",
-            "ijpb_admin_email": "stephanie.zimmermann@inrae.fr",
+            "ijpb_admin_email": "",
             "analysis_types": ANALYSIS_TYPES.copy(),
             "analysis_type_translations": ANALYSIS_TYPES_EN.copy(),
         }
@@ -415,7 +415,7 @@ def load_notification_settings():
     return {
         "admin_email": str(settings.get("admin_email", DEFAULT_ADMIN_EMAIL)).strip(),
         "admin_cc_email": str(settings.get("admin_cc_email", "")).strip(),
-        "ijpb_admin_email": str(settings.get("ijpb_admin_email") or "stephanie.zimmermann@inrae.fr").strip(),
+        "ijpb_admin_email": str(settings.get("ijpb_admin_email", "")).strip(),
         "analysis_types": list(dict.fromkeys(
             ANALYSIS_TYPES + [
                 normalize_analysis_type_name(x)
