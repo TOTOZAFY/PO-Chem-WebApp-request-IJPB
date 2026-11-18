@@ -4015,6 +4015,57 @@ if os.path.isfile(_charter_path):
             use_container_width=True,
         )
 
+# Personal-data information notice displayed directly below the charter download
+# in the sidebar, as requested. Bilingual content follows the selected UI language.
+with st.sidebar.expander(
+    "Protection des données personnelles" if _footer_fr else "Personal data protection",
+    expanded=False,
+):
+    if _footer_fr:
+        st.markdown("""
+**Responsable du traitement**  
+INRAE – Plateforme OV-Chimie-Métabolisme / IJPB. Les coordonnées du contact institutionnel et du délégué à la protection des données doivent être précisées dans la version définitive de cette notice.
+
+**Données collectées**  
+Les informations saisies dans ce formulaire peuvent inclure le nom et le prénom du responsable, son adresse e-mail et son numéro de téléphone professionnels, les coordonnées du personnel administratif, le laboratoire ou groupe, le nom et la description du projet, les informations relatives aux analyses et aux échantillons, ainsi que les échanges associés à la demande.
+
+**Finalités**  
+Ces données sont utilisées pour recevoir et instruire la demande, vérifier l'adresse e-mail du responsable, contacter les personnes concernées, organiser les analyses, assurer le suivi administratif et communiquer les informations relatives au traitement de la demande.
+
+**Destinataires et stockage**  
+Les données sont accessibles aux personnes habilitées de la plateforme qui en ont besoin pour traiter la demande. Les documents et métadonnées de la demande sont stockés dans l'espace Nextcloud utilisé par la plateforme. Certaines informations peuvent également figurer dans les courriels de notification et de suivi adressés aux destinataires concernés.
+
+**Durée de conservation**  
+La durée de conservation doit être définie et validée par INRAE en fonction des obligations applicables et des besoins de suivi. À compléter avant publication définitive : **[indiquer la durée de conservation validée]**.
+
+**Droits des personnes**  
+Conformément à la réglementation applicable en matière de protection des données, les personnes concernées peuvent exercer leurs droits auprès du contact compétent d'INRAE ou du délégué à la protection des données. À compléter avant publication : **[indiquer l'adresse de contact du DPO / le lien institutionnel]**.
+
+Cette notice est une proposition de travail et doit être validée par le DPO d'INRAE avant sa publication.
+""")
+    else:
+        st.markdown("""
+**Data controller**  
+INRAE – OV Chemistry-Metabolism Platform / IJPB. The institutional contact details and the Data Protection Officer's contact details must be specified in the final version of this notice.
+
+**Data collected**  
+Information entered in this form may include the project manager's first and last name, professional email address and telephone number, administrative staff contact details, laboratory or group, project name and description, information about requested analyses and samples, and communications relating to the request.
+
+**Purposes**  
+The data are used to receive and process the request, verify the project manager's email address, contact the relevant people, organise analyses, provide administrative follow-up and communicate information about the request.
+
+**Recipients and storage**  
+The data are accessible to authorised platform staff who need them to process the request. Request documents and metadata are stored in the Nextcloud space used by the platform. Some information may also appear in notification and follow-up emails sent to the relevant recipients.
+
+**Retention period**  
+The retention period must be defined and approved by INRAE in accordance with applicable obligations and follow-up requirements. To be completed before final publication: **[insert the approved retention period]**.
+
+**Data subject rights**  
+Under applicable data-protection regulations, individuals may exercise their rights by contacting the relevant INRAE contact or the Data Protection Officer. To be completed before publication: **[insert the DPO contact address / institutional link]**.
+
+This notice is a working draft and must be approved by INRAE's Data Protection Officer before publication.
+""")
+
 if st.query_params.get("fair_token"):
     try:
         fair_records = load_metadata()
