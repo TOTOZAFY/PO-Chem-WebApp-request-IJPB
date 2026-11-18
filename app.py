@@ -3,6 +3,8 @@ import re
 import streamlit as st
 import streamlit.components.v1 as components
 from datetime import date, datetime
+import uuid
+import requests
 # Cloudflare Turnstile component (local frontend; token verified server-side).
 _TURNSTILE_COMPONENT = components.declare_component(
     "po_chem_turnstile", path=os.path.join(os.path.dirname(__file__), "turnstile_component")
@@ -3370,6 +3372,7 @@ def render_form():
                     if st.session_state.language == "fr"
                     else "You must read and accept the platform charter before submitting the request."
                 )
+            document_bytes, filename = None, None
             if form_fields_valid:
                 if not data.get("request_id"):
                     request_timestamp = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S")
@@ -3385,106 +3388,130 @@ def render_form():
                 except Exception as exc:
                     st.error(f"{t('word_generation_error')} {exc}")
                     document_bytes, filename = None, None
-                if document_bytes is not None:
-                    submission_ready = bool(form_fields_valid and charter_accepted and captcha_token and captcha_secret and captcha_sitekey)
-                    submit_clicked = st.button(
-                        t("submit"), type="primary", use_container_width=True,
-                        disabled=not submission_ready,
+
+            # Always display the actual submission button. It is disabled until every
+            # prerequisite is satisfied; the same checks are repeated server-side.
+            submission_ready = bool(
+                form_fields_valid
+                and charter_accepted
+                and captcha_token
+                and captcha_secret
+                and captcha_sitekey
+                and document_bytes is not None
+            )
+            submit_clicked = st.button(
+                t("submit"), type="primary", use_container_width=True,
+                disabled=not submission_ready,
+                key="final_submit_request_button",
+            )
+            if submit_clicked:
+                if not form_fields_valid:
+                    st.error(t("required"))
+                elif not st.session_state.get("charter_accepted_checkbox", False):
+                    st.error(
+                        "Vous devez lire et accepter la charte de la plateforme avant de soumettre la demande."
+                        if st.session_state.language == "fr"
+                        else "You must read and agree to the platform charter before submitting the request."
                     )
-                    if submit_clicked:
-                        if not st.session_state.get("charter_accepted_checkbox", False):
-                            st.error(
-                                "Vous devez lire et accepter la charte de la plateforme avant de soumettre la demande."
-                                if st.session_state.language == "fr"
-                                else "You must read and accept the platform charter before submitting the request."
+                elif not (captcha_token and captcha_secret and captcha_sitekey):
+                    st.error(
+                        "Veuillez compléter la vérification humaine avant de soumettre la demande."
+                        if st.session_state.language == "fr"
+                        else "Please complete the human verification before submitting the request."
+                    )
+                elif not verify_turnstile_token(captcha_token, captcha_secret):
+                    st.error(
+                        "La vérification humaine a échoué. Veuillez recommencer."
+                        if st.session_state.language == "fr"
+                        else "Human verification failed. Please try again."
+                    )
+                elif document_bytes is None or filename is None:
+                    st.error(
+                        "Le document n'a pas pu être généré. Vérifiez les informations saisies."
+                        if st.session_state.language == "fr"
+                        else "The document could not be generated. Please check the entered information."
+                    )
+                else:
+                    try:
+                        ensure_remote_folder("OV-Chimie")
+                        ensure_remote_folder("OV-Chimie/E-GES-01")
+                        ensure_remote_folder(CLOUD_FOLDER)
+                        remote_file = f"{CLOUD_FOLDER}/{filename}"
+                        upload = webdav_request("PUT", remote_file, data=document_bytes)
+                        upload.raise_for_status()
+                        records = load_metadata()
+                        request_id = data["request_id"]
+                        record = {
+                            "id": request_id,
+                            "project_name": data.get("project_name", ""),
+                            "visibility": data.get("visibility", "Public (IJPB)"),
+                            "project_manager": data.get("project_manager", "").strip(),
+                            "project_manager_first_name": data.get("project_manager_first_name", "").strip(),
+                            "manager_email": data.get("manager_email", ""),
+                            "admin_staff": data.get("admin_staff", ""),
+                            "admin_phone": data.get("admin_phone", ""),
+                            "admin_email": data.get("admin_email", ""),
+                            "platform_staff_email": data.get("platform_staff_email", ""),
+                            "analysis_type": data.get("analysis_type", ""),
+                            "analysis_mode": data.get("analysis_mode", ""),
+                            "analysis_details": data.get("analysis_details", ""),
+                            "sample_count": int(data.get("sample_count", 1) or 1),
+                            "analysis_items": [{**x, "sample_count": int(x.get("sample_count", 1) or 1)} for x in data.get("analysis_items", [])],
+                            "group": data.get("group", ""),
+                            "request_date": data.get("date", ""),
+                            "submitted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                            "status": "pending",
+                            "admin_comment": "",
+                            "charter_accepted": True,
+                            "charter_accepted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                            "document_path": remote_file,
+                            "filename": filename,
+                        }
+                        fair_bytes = create_fair_workbook(record)
+                        fair_path = fair_remote_path(record)
+                        fair_upload = webdav_request("PUT", fair_path, data=fair_bytes)
+                        fair_upload.raise_for_status()
+                        record["fair_path"] = fair_path
+                        record["fair_status"] = "created"
+                        record["fair_token"] = uuid.uuid4().hex
+                        records.append(record)
+                        save_metadata(records)
+                        st.session_state.last_submission = {
+                            "document": document_bytes, "filename": filename, "id": request_id
+                        }
+                        st.session_state.data = {}
+                        st.session_state.step = 0
+                        try:
+                            # Recipients are editable in the administrator area and stored in Nextcloud.
+                            recipients = load_notification_settings()
+                            admin_email = recipients.get("admin_email") or DEFAULT_ADMIN_EMAIL
+                            platform_staff_cc = join_email_recipients(
+                                record.get("platform_staff_email", ""),
                             )
-                        elif not verify_turnstile_token(captcha_token, captcha_secret):
-                            st.error(
-                                "La vérification humaine a échoué. Veuillez recommencer."
-                                if st.session_state.language == "fr"
-                                else "Human verification failed. Please try again."
+                            send_email(
+                                admin_email,
+                                t("mail_admin_subject"),
+                                t("mail_admin_body").format(
+                                    project=record["project_name"],
+                                    manager=" ".join(
+                                        part for part in (
+                                            record.get("project_manager", ""),
+                                            record.get("project_manager_first_name", ""),
+                                        ) if str(part or "").strip()
+                                    ),
+                                    group=record["group"],
+                                    analysis_type=" ; ".join(x.get("analysis_type", "") for x in record.get("analysis_items", [])) or record.get("analysis_type", ""),
+                                    analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
+                                    path=remote_file,
+                                ),
+                                cc=platform_staff_cc,
+                                reply_to=record.get("manager_email", "").strip() or None,
                             )
-                        else:
-                            try:
-                                ensure_remote_folder("OV-Chimie")
-                                ensure_remote_folder("OV-Chimie/E-GES-01")
-                                ensure_remote_folder(CLOUD_FOLDER)
-                                remote_file = f"{CLOUD_FOLDER}/{filename}"
-                                upload = webdav_request("PUT", remote_file, data=document_bytes)
-                                upload.raise_for_status()
-                                records = load_metadata()
-                                request_id = data["request_id"]
-                                record = {
-                                    "id": request_id,
-                                    "project_name": data.get("project_name", ""),
-                                    "visibility": data.get("visibility", "Public (IJPB)"),
-                                    "project_manager": data.get("project_manager", "").strip(),
-                                    "project_manager_first_name": data.get("project_manager_first_name", "").strip(),
-                                    "manager_email": data.get("manager_email", ""),
-                                    "admin_staff": data.get("admin_staff", ""),
-                                    "admin_phone": data.get("admin_phone", ""),
-                                    "admin_email": data.get("admin_email", ""),
-                                    "platform_staff_email": data.get("platform_staff_email", ""),
-                                    "analysis_type": data.get("analysis_type", ""),
-                                    "analysis_mode": data.get("analysis_mode", ""),
-                                    "analysis_details": data.get("analysis_details", ""),
-                                    "sample_count": int(data.get("sample_count", 1) or 1),
-                                    "analysis_items": [{**x, "sample_count": int(x.get("sample_count", 1) or 1)} for x in data.get("analysis_items", [])],
-                                    "group": data.get("group", ""),
-                                    "request_date": data.get("date", ""),
-                                    "submitted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-                                    "status": "pending",
-                                    "admin_comment": "",
-                                    "charter_accepted": True,
-                                    "charter_accepted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-                                    "document_path": remote_file,
-                                    "filename": filename,
-                                }
-                                fair_bytes = create_fair_workbook(record)
-                                fair_path = fair_remote_path(record)
-                                fair_upload = webdav_request("PUT", fair_path, data=fair_bytes)
-                                fair_upload.raise_for_status()
-                                record["fair_path"] = fair_path
-                                record["fair_status"] = "created"
-                                record["fair_token"] = uuid.uuid4().hex
-                                records.append(record)
-                                save_metadata(records)
-                                st.session_state.last_submission = {
-                                    "document": document_bytes, "filename": filename, "id": request_id
-                                }
-                                st.session_state.data = {}
-                                st.session_state.step = 0
-                                try:
-                                    # Recipients are editable in the administrator area and stored in Nextcloud.
-                                    recipients = load_notification_settings()
-                                    admin_email = recipients.get("admin_email") or DEFAULT_ADMIN_EMAIL
-                                    platform_staff_cc = join_email_recipients(
-                                        record.get("platform_staff_email", ""),
-                                    )
-                                    send_email(
-                                        admin_email,
-                                        t("mail_admin_subject"),
-                                        t("mail_admin_body").format(
-                                            project=record["project_name"],
-                                            manager=" ".join(
-                                                part for part in (
-                                                    record.get("project_manager", ""),
-                                                    record.get("project_manager_first_name", ""),
-                                                ) if str(part or "").strip()
-                                            ),
-                                            group=record["group"],
-                                            analysis_type=" ; ".join(x.get("analysis_type", "") for x in record.get("analysis_items", [])) or record.get("analysis_type", ""),
-                                            analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
-                                            path=remote_file,
-                                        ),
-                                        cc=platform_staff_cc,
-                                        reply_to=record.get("manager_email", "").strip() or None,
-                                    )
-                                    st.success(t("submitted_notified"))
-                                except Exception as mail_exc:
-                                    st.warning(f"{t('mail_warning')} {mail_exc}")
-                            except Exception as exc:
-                                st.error(f"{t('cloud_error')} {exc}")
+                            st.success(t("submitted_notified"))
+                        except Exception as mail_exc:
+                            st.warning(f"{t('mail_warning')} {mail_exc}")
+                    except Exception as exc:
+                        st.error(f"{t('cloud_error')} {exc}")
 
     st.divider()
     if step < len(steps) - 1:
