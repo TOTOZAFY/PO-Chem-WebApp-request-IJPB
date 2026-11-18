@@ -1,1 +1,45 @@
-
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;padding:0;background:transparent;font-family:Arial,sans-serif}#widget{min-height:70px}#status{display:none;color:#b45309;font-size:13px;margin-top:6px}</style>
+</head>
+<body>
+<div id="widget"></div><div id="status"></div>
+<script>
+(function(){
+  'use strict';
+  let args={}, widgetId=null, renderedSitekey=null, loading=false, loaded=false;
+  function send(type, extra={}){parent.postMessage(Object.assign({isStreamlitMessage:true,type:type},extra),'*');}
+  function height(h){send('streamlit:setFrameHeight',{height:h});}
+  function value(token){send('streamlit:setComponentValue',{value:token||null,dataType:token?'string':'null'});}
+  function status(msg){const el=document.getElementById('status');el.textContent=msg||'';el.style.display=msg?'block':'none';}
+  function render(){
+    if(!loaded||!window.turnstile||!args.sitekey)return;
+    if(widgetId!==null&&renderedSitekey===args.sitekey)return;
+    document.getElementById('widget').innerHTML='';status('');value(null);
+    try{
+      widgetId=window.turnstile.render('#widget',{
+        sitekey:args.sitekey,language:args.language||'auto',theme:'auto',size:'normal',appearance:'always',
+        callback:function(token){value(token);status('');height(90);},
+        'expired-callback':function(){value(null);status('La vérification a expiré. Veuillez recommencer.');},
+        'error-callback':function(code){value(null);status('Erreur Cloudflare Turnstile ('+(code||'')+'). Rechargez ou réessayez.');}
+      });
+      renderedSitekey=args.sitekey;height(100);
+    }catch(e){console.error('Turnstile render error',e);status('Impossible d’afficher la vérification Cloudflare.');height(120);}
+  }
+  function load(){
+    if(loaded){render();return;} if(loading)return; loading=true;
+    const script=document.createElement('script');
+    script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.async=true;script.defer=true;
+    script.onload=function(){loading=false;loaded=true;render();};
+    script.onerror=function(){loading=false;status('Impossible de charger Cloudflare Turnstile. Vérifiez votre connexion.');height(120);};
+    document.head.appendChild(script);
+  }
+  window.addEventListener('message',function(e){if(!e.data||e.data.type!=='streamlit:render')return;args=e.data.args||{};load();});
+  send('streamlit:componentReady',{apiVersion:1});height(100);
+})();
+</script>
+</body>
+</html>
