@@ -65,3 +65,20 @@ d'authentification : ne pas y stocker d'informations confidentielles.
 
 Version 2.8 – Data Treatment modes
 La feuille FAIR Data treatment propose maintenant deux choix : traitement par MZmine (formulaire et tableau POS/NEG existants) ou traitement personnalisé (champ texte libre). Les deux jeux d'informations sont conservés lorsque l'utilisateur change de méthode.
+
+
+DOUBLE AUTHENTIFICATION (OTP)
+-----------------------------
+Ajouter également dans les secrets Streamlit :
+
+OTP_PEPPER = "une-longue-valeur-aleatoire-secrete-et-unique"
+
+L'application réutilise la section [smtp] existante pour envoyer les codes.
+Le stockage partagé des challenges et limites OTP utilise Nextcloud : le compte
+Nextcloud doit pouvoir lire et écrire OV-Chimie/otp_security_state.json.
+L'administrateur choisit après son mot de passe l'adresse ov-chimie@inrae.fr
+ou saisit une autre adresse directement dans l'interface. La session admin
+expire après 24 heures. Les codes sont à 6 chiffres, valables 5 minutes,
+à usage unique, 4 essais maximum, délai de 60 secondes et 3 envois par
+adresse et par période glissante de 15 minutes. Chaque nouvelle soumission
+requiert une nouvelle vérification de l'adresse du responsable.

@@ -8,6 +8,10 @@ import smtplib
 import json
 import uuid
 import unicodedata
+import secrets
+import hashlib
+import hmac
+import time
 from datetime import date, datetime
 from email.message import EmailMessage
 from io import BytesIO
@@ -73,6 +77,7 @@ METADATA_PATH = "OV-Chimie/demandes_metadata.json"
 NOTIFICATION_SETTINGS_PATH = "OV-Chimie/notification_settings.json"
 USER_PROFILES_PATH = "OV-Chimie/user_profiles.json"
 OPERATORS_PATH = "OV-Chimie/operators_directory.json"
+OTP_STATE_PATH = "OV-Chimie/otp_security_state.json"
 FAIR_FOLDER = CLOUD_FOLDER
 DEFAULT_ADMIN_EMAIL = "ov-chimie@inrae.fr"
 ANALYSIS_TYPES = [
@@ -441,6 +446,163 @@ def save_operators_directory(operators):
         timeout=30,
     )
     response.raise_for_status()
+
+
+def _otp_pepper():
+    """Dedicated server-side pepper; fail closed when not configured."""
+    return str(get_secret("OTP_PEPPER", "") or get_secret("ADMIN_PASSWORD", "") or "").strip()
+
+
+def _load_otp_state():
+    """Persist OTP hashes and rolling send counters in shared Nextcloud storage."""
+    response = webdav_request("GET", OTP_STATE_PATH)
+    if response.status_code == 404:
+        return {}
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise RuntimeError("Le stockage de sécurité OTP est invalide.")
+    return payload
+
+
+def _save_otp_state(state):
+    response = webdav_request("PUT", OTP_STATE_PATH,
+        data=json.dumps(state, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), timeout=20)
+    response.raise_for_status()
+
+
+def _otp_key(purpose, email):
+    return f"{purpose}:{str(email).strip().casefold()}"
+
+
+def _otp_digest(code, challenge_id):
+    pepper = _otp_pepper()
+    if not pepper:
+        raise RuntimeError("Configurez OTP_PEPPER dans les secrets Streamlit.")
+    return hmac.new(pepper.encode(), f"{challenge_id}:{code}".encode(), hashlib.sha256).hexdigest()
+
+
+def issue_otp(email, purpose):
+    """Issue one 6-digit OTP; 60s cooldown and max 3 sends in rolling 15 min."""
+    email = str(email or "").strip()
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise ValueError("Adresse e-mail invalide.")
+    now = int(time.time())
+    state = _load_otp_state()
+    key = _otp_key(purpose, email)
+    entry = state.get(key, {}) if isinstance(state.get(key), dict) else {}
+    sends = [int(x) for x in entry.get("sends", []) if now - int(x) < 900]
+    if sends and now - sends[-1] < 60:
+        raise ValueError("Veuillez attendre 60 secondes avant de demander un nouveau code.")
+    if len(sends) >= 3:
+        raise ValueError("Limite atteinte : 3 codes maximum par période de 15 minutes.")
+    code = f"{secrets.randbelow(1000000):06d}"
+    challenge_id = uuid.uuid4().hex
+    entry.update({"challenge_id": challenge_id, "code_hash": _otp_digest(code, challenge_id),
+                  "expires_at": now + 300, "attempts": 0, "sends": sends + [now], "used": False})
+    state[key] = entry
+    _save_otp_state(state)
+    subject = "Code de vérification PO-Chem" if st.session_state.get("language", "fr") == "fr" else "PO-Chem verification code"
+    body = (f"Votre code de vérification PO-Chem est : {code}\n\nIl est valable 5 minutes et ne peut être utilisé qu'une seule fois.\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message.")
+    send_email(email, subject, body)
+    return challenge_id
+
+
+def verify_otp(email, purpose, code):
+    now = int(time.time())
+    state = _load_otp_state()
+    key = _otp_key(purpose, email)
+    entry = state.get(key, {}) if isinstance(state.get(key), dict) else {}
+    if not entry or entry.get("used") or now > int(entry.get("expires_at", 0)):
+        return False, "Code expiré ou inexistant. Demandez un nouveau code."
+    if int(entry.get("attempts", 0)) >= 4:
+        return False, "Nombre maximal de tentatives atteint. Demandez un nouveau code après la période de limitation."
+    expected = str(entry.get("code_hash", ""))
+    supplied = _otp_digest(str(code).strip(), str(entry.get("challenge_id", "")))
+    if not hmac.compare_digest(expected, supplied):
+        entry["attempts"] = int(entry.get("attempts", 0)) + 1
+        if entry["attempts"] >= 4:
+            entry["used"] = True
+        state[key] = entry
+        _save_otp_state(state)
+        return False, "Code incorrect."
+    entry["used"] = True
+    entry.pop("code_hash", None)
+    state[key] = entry
+    _save_otp_state(state)
+    return True, "OK"
+
+
+def admin_session_valid():
+    expires = int(st.session_state.get("admin_2fa_expires_at", 0) or 0)
+    if expires <= int(time.time()):
+        for key in ("admin_authenticated", "fair_sample_admin_authenticated", "fair_analysis_admin_authenticated",
+                    "fair_data_treatment_admin_authenticated", "fair_pipeline_admin_authenticated"):
+            st.session_state[key] = False
+        st.session_state.pop("admin_2fa_expires_at", None)
+        return False
+    return True
+
+
+def render_admin_2fa_gate(scope="admin"):
+    """Shared admin password + OTP gate; one verified session covers all admin sections for 24h."""
+    if admin_session_valid():
+        return True
+    fr = st.session_state.get("language", "fr") == "fr"
+    expected = str(get_secret("ADMIN_PASSWORD", "") or "")
+    if not expected:
+        st.error("Le secret ADMIN_PASSWORD n'est pas configuré." if fr else "ADMIN_PASSWORD secret is not configured.")
+        return False
+    if not st.session_state.get("admin_2fa_password_ok", False):
+        with st.form(f"{scope}_admin_password_form"):
+            password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
+            clicked = st.form_submit_button("Continuer" if fr else "Continue")
+        if clicked:
+            if hmac.compare_digest(password, expected):
+                st.session_state["admin_2fa_password_ok"] = True
+                st.rerun()
+            else:
+                st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+        return False
+    st.markdown("**Deuxième facteur – vérification par e-mail**" if fr else "**Second factor – email verification**")
+    email_choice = st.radio("Adresse de réception" if fr else "Delivery address",
+        ["ov-chimie@inrae.fr", "Autre adresse e-mail" if fr else "Other email address"],
+        key="admin_2fa_email_choice")
+    if email_choice == "ov-chimie@inrae.fr":
+        target = "ov-chimie@inrae.fr"
+    else:
+        target = st.text_input("Adresse e-mail secondaire" if fr else "Alternative email address", key="admin_2fa_custom_email").strip()
+    if st.button("Envoyer le code" if fr else "Send code", key=f"{scope}_admin_send_otp"):
+        try:
+            challenge = issue_otp(target, "admin")
+            st.session_state["admin_2fa_target"] = target
+            st.session_state["admin_2fa_challenge"] = challenge
+            st.success("Code envoyé. Il est valable 5 minutes." if fr else "Code sent. It is valid for 5 minutes.")
+        except Exception as exc:
+            st.error(str(exc))
+    if st.session_state.get("admin_2fa_challenge") and st.session_state.get("admin_2fa_target") == target:
+        with st.form(f"{scope}_admin_verify_otp_form"):
+            code = st.text_input("Code à 6 chiffres" if fr else "6-digit code", max_chars=6)
+            verify = st.form_submit_button("Vérifier et accéder" if fr else "Verify and enter")
+        if verify:
+            try:
+                valid, message = verify_otp(target, "admin", code)
+                if valid:
+                    st.session_state["admin_2fa_expires_at"] = int(time.time()) + 86400
+                    st.session_state["admin_2fa_password_ok"] = False
+                    st.session_state["admin_2fa_challenge"] = None
+                    st.session_state["admin_2fa_target"] = None
+                    st.session_state.admin_authenticated = True
+                    st.session_state.fair_sample_admin_authenticated = True
+                    st.session_state.fair_analysis_admin_authenticated = True
+                    st.session_state.fair_data_treatment_admin_authenticated = True
+                    st.session_state.fair_pipeline_admin_authenticated = True
+                    st.rerun()
+                else:
+                    st.error(message)
+            except Exception as exc:
+                st.error(f"Vérification impossible : {exc}")
+    return False
 
 
 def normalize_analysis_type_name(value):
@@ -1510,16 +1672,7 @@ def render_fair_pipeline_access():
         if record:
             render_fair_pipeline_step(record, records)
         return
-    password_expected = get_secret("ADMIN_PASSWORD", "")
-    if not st.session_state.get("fair_pipeline_admin_authenticated", False):
-        with st.form("fair_pipeline_admin_login_form"):
-            password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
-            login = st.form_submit_button("Se connecter" if fr else "Log in")
-        if login and password == password_expected:
-            st.session_state["fair_pipeline_admin_authenticated"] = True
-            st.rerun()
-        elif login:
-            st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+    if not render_admin_2fa_gate("fair_pipeline"):
         return
     if active_records:
         choices = {f"{r.get('id')} – {r.get('project_name', '')}": r for r in active_records}
@@ -1556,19 +1709,7 @@ def render_fair_data_treatment_access():
         if record:
             render_fair_data_treatment(record, records)
         return
-    admin_password = get_secret("ADMIN_PASSWORD", "")
-    if not admin_password:
-        st.error("Le secret ADMIN_PASSWORD n'est pas configuré." if fr else "ADMIN_PASSWORD secret is not configured.")
-        return
-    if not st.session_state.get("fair_data_treatment_admin_authenticated", False):
-        with st.form("fair_data_treatment_admin_login_form"):
-            password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
-            login = st.form_submit_button("Se connecter" if fr else "Log in")
-        if login and password == admin_password:
-            st.session_state["fair_data_treatment_admin_authenticated"] = True
-            st.rerun()
-        elif login:
-            st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+    if not render_admin_2fa_gate("fair_data_treatment"):
         return
     if active_records:
         choices = {f"{r.get('id')} – {r.get('project_name', '')}": r for r in active_records}
@@ -1621,19 +1762,7 @@ def render_fair_portal():
             if record:
                 render_fair_analysis(record, records)
             return
-        admin_password = get_secret("ADMIN_PASSWORD", "")
-        if not admin_password:
-            st.error("Le secret ADMIN_PASSWORD n'est pas configuré." if fr else "ADMIN_PASSWORD secret is not configured.")
-            return
-        if not st.session_state.get("fair_analysis_admin_authenticated", False):
-            with st.form("fair_analysis_admin_login_form"):
-                password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
-                login = st.form_submit_button("Se connecter" if fr else "Log in")
-            if login and password == admin_password:
-                st.session_state["fair_analysis_admin_authenticated"] = True
-                st.rerun()
-            elif login:
-                st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+        if not render_admin_2fa_gate("fair_analysis"):
             return
         if active_records:
             choices = {f"{r.get('id')} – {r.get('project_name', '')}": r for r in active_records}
@@ -1707,24 +1836,17 @@ def render_fair_portal():
         if fr else
         "The administrator can complete only the fields assigned to them in Sample."
     )
-    admin_password = get_secret("ADMIN_PASSWORD", "")
-    if not admin_password:
-        st.error("Le secret ADMIN_PASSWORD n'est pas configuré." if fr else "ADMIN_PASSWORD secret is not configured.")
-        return
-    if not st.session_state.get("fair_sample_admin_authenticated", False):
-        with st.form("fair_sample_admin_login_form"):
-            password = st.text_input("Mot de passe administrateur" if fr else "Administrator password", type="password")
-            login = st.form_submit_button("Se connecter" if fr else "Log in")
-        if login:
-            if password == str(admin_password):
-                st.session_state["fair_sample_admin_authenticated"] = True
-                st.rerun()
-            else:
-                st.error("Mot de passe incorrect." if fr else "Incorrect password.")
+    if not render_admin_2fa_gate("fair_sample"):
         return
 
     if st.button("Se déconnecter de Sample administrateur" if fr else "Log out of Sample administrator"):
-        st.session_state["fair_sample_admin_authenticated"] = False
+        for key in ("admin_authenticated", "fair_sample_admin_authenticated", "fair_analysis_admin_authenticated",
+                    "fair_data_treatment_admin_authenticated", "fair_pipeline_admin_authenticated"):
+            st.session_state[key] = False
+        st.session_state.pop("admin_2fa_expires_at", None)
+        st.session_state.pop("admin_2fa_password_ok", None)
+        st.session_state.pop("admin_2fa_challenge", None)
+        st.session_state.pop("admin_2fa_target", None)
         st.session_state.pop("fair_sample_admin_request_id", None)
         st.rerun()
 
@@ -1740,24 +1862,15 @@ def render_fair_portal():
 
 def render_admin():
     st.title(t("admin_title"))
-    admin_password = get_secret("ADMIN_PASSWORD", "")
-    if not admin_password:
-        st.error(t("not_configured_admin"))
-        return
-    if not st.session_state.get("admin_authenticated", False):
-        with st.form("admin_login_form"):
-            password = st.text_input(t("password"), type="password")
-            login = st.form_submit_button(t("login"))
-        if login:
-            if password == str(admin_password):
-                st.session_state.admin_authenticated = True
-                st.rerun()
-            else:
-                st.error(t("wrong_password"))
+    if not render_admin_2fa_gate("main_admin"):
         return
 
     if st.button(t("logout")):
-        st.session_state.admin_authenticated = False
+        for key in ("admin_authenticated", "fair_sample_admin_authenticated", "fair_analysis_admin_authenticated",
+                    "fair_data_treatment_admin_authenticated", "fair_pipeline_admin_authenticated"):
+            st.session_state[key] = False
+        st.session_state.pop("admin_2fa_expires_at", None)
+        st.session_state.pop("admin_2fa_password_ok", None)
         st.rerun()
     try:
         records = load_metadata()
@@ -3400,6 +3513,39 @@ def render_form():
                     st.error(f"{t('word_generation_error')} {exc}")
                     document_bytes, filename = None, None
 
+            # Email OTP verification is required for each new request submission.
+            manager_email = str(data.get("manager_email", "")).strip()
+            otp_verified = bool(st.session_state.get("submission_otp_verified", False)
+                                and st.session_state.get("submission_otp_email", "").casefold() == manager_email.casefold())
+            if form_fields_valid and email_is_valid:
+                st.markdown("### Vérification de l'adresse e-mail" if st.session_state.language == "fr" else "### Email address verification")
+                if not otp_verified:
+                    if st.button("Envoyer un code de vérification" if st.session_state.language == "fr" else "Send verification code", key="submission_send_otp"):
+                        try:
+                            issue_otp(manager_email, "submission")
+                            st.session_state["submission_otp_email"] = manager_email
+                            st.session_state["submission_otp_sent"] = True
+                            st.success("Un code à 6 chiffres vient d'être envoyé. Il est valable 5 minutes." if st.session_state.language == "fr" else "A 6-digit code was sent. It is valid for 5 minutes.")
+                        except Exception as exc:
+                            st.error(str(exc))
+                    if st.session_state.get("submission_otp_sent") and st.session_state.get("submission_otp_email", "").casefold() == manager_email.casefold():
+                        with st.form("submission_verify_otp_form"):
+                            otp_code = st.text_input("Code reçu par e-mail" if st.session_state.language == "fr" else "Email verification code", max_chars=6)
+                            otp_check = st.form_submit_button("Vérifier l'adresse e-mail" if st.session_state.language == "fr" else "Verify email address")
+                        if otp_check:
+                            try:
+                                valid, message = verify_otp(manager_email, "submission", otp_code)
+                                if valid:
+                                    st.session_state["submission_otp_verified"] = True
+                                    st.success("Adresse e-mail vérifiée. Vous pouvez soumettre votre demande." if st.session_state.language == "fr" else "Email verified. You can submit your request.")
+                                    st.rerun()
+                                else:
+                                    st.error(message)
+                            except Exception as exc:
+                                st.error(f"Vérification impossible : {exc}")
+                else:
+                    st.success("Adresse e-mail vérifiée." if st.session_state.language == "fr" else "Email address verified.")
+
             # Always display the actual submission button. It is disabled until every
             # prerequisite is satisfied; the same checks are repeated server-side.
             submission_ready = bool(
@@ -3409,6 +3555,7 @@ def render_form():
                 and captcha_secret
                 and captcha_sitekey
                 and document_bytes is not None
+                and otp_verified
             )
             submit_clicked = st.button(
                 t("submit"), type="primary", use_container_width=True,
@@ -3430,6 +3577,9 @@ def render_form():
                         if st.session_state.language == "fr"
                         else "Please complete the human verification before submitting the request."
                     )
+                elif not (st.session_state.get("submission_otp_verified", False)
+                          and st.session_state.get("submission_otp_email", "").casefold() == str(data.get("manager_email", "")).strip().casefold()):
+                    st.error("Veuillez vérifier l'adresse e-mail du responsable avant la soumission." if st.session_state.language == "fr" else "Please verify the project manager email before submission.")
                 elif not verify_turnstile_token(captcha_token, captcha_secret):
                     st.error(
                         "La vérification humaine a échoué. Veuillez recommencer."
@@ -3492,6 +3642,9 @@ def render_form():
                         }
                         st.session_state.data = {}
                         st.session_state.step = 0
+                        st.session_state["submission_otp_verified"] = False
+                        st.session_state["submission_otp_sent"] = False
+                        st.session_state["submission_otp_email"] = ""
                         try:
                             # Recipients are editable in the administrator area and stored in Nextcloud.
                             recipients = load_notification_settings()
