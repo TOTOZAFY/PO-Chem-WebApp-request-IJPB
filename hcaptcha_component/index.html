@@ -1,1 +1,32 @@
-
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>body{margin:0;padding:0;font-family:Arial,sans-serif;background:transparent}</style>
+<script src="https://js.hcaptcha.com/1/api.js?render=explicit&onload=onHCaptchaLoaded" async defer></script>
+</head>
+<body>
+<div id="captcha"></div>
+<script>
+(function(){
+  let widgetId=null, lastSitekey=null, lastLang=null;
+  function send(type, extra){ parent.postMessage(Object.assign({type:type},extra||{}), '*'); }
+  window.onHCaptchaLoaded=function(){ render(); };
+  function render(){
+    if(!window.hcaptcha || !window.__streamlitArgs) return;
+    const args=window.__streamlitArgs;
+    const sitekey=args.sitekey, language=args.language||'fr';
+    if(!sitekey || (widgetId!==null && sitekey===lastSitekey && language===lastLang)) return;
+    document.getElementById('captcha').innerHTML='';
+    widgetId=window.hcaptcha.render('captcha',{sitekey:sitekey,hl:language,callback:function(token){send('streamlit:setComponentValue',{value:token,dataType:'string'});},'expired-callback':function(){send('streamlit:setComponentValue',{value:null,dataType:'null'});},'error-callback':function(){send('streamlit:setComponentValue',{value:null,dataType:'null'});}});
+    lastSitekey=sitekey;lastLang=language;
+  }
+  window.addEventListener('message',function(event){
+    if(event.data && event.data.type==='streamlit:render'){window.__streamlitArgs=event.data.args||{};render();}
+  });
+  send('streamlit:componentReady',{apiVersion:1});
+  send('streamlit:setFrameHeight',{height:100});
+})();
+</script>
+</body>
+</html>
