@@ -15,42 +15,6 @@ from urllib.parse import quote
 
 import requests
 import streamlit as st
-import streamlit.components.v1 as components
-
-# hCaptcha component (local frontend; token is verified server-side).
-_HCAPTCHA_COMPONENT = components.declare_component(
-    "po_chem_hcaptcha", path=os.path.join(os.path.dirname(__file__), "hcaptcha_component")
-)
-
-def hcaptcha_widget(sitekey: str, language: str = "fr"):
-    return _HCAPTCHA_COMPONENT(sitekey=sitekey, language=language, default=None, key="po_chem_hcaptcha_widget")
-
-def _captcha_secret_and_sitekey():
-    try:
-        secret = st.secrets.get("HCAPTCHA_SECRET", "")
-        sitekey = st.secrets.get("HCAPTCHA_SITEKEY", "")
-    except Exception:
-        secret, sitekey = "", ""
-    return str(secret or "").strip(), str(sitekey or "").strip()
-
-def verify_hcaptcha_token(token: str, secret: str, sitekey: str) -> bool:
-    if not token or not secret or not sitekey:
-        st.error("La vérification anti-robot n'est pas configurée ou n'a pas été validée." if st.session_state.get("language", "fr") == "fr" else "The anti-bot verification is not configured or has not been completed.")
-        return False
-    try:
-        response = requests.post(
-            "https://api.hcaptcha.com/siteverify",
-            data={"secret": secret, "response": token, "sitekey": sitekey},
-            timeout=10,
-        )
-        response.raise_for_status()
-        result = response.json()
-        if result.get("success") is True:
-            return True
-    except Exception:
-        pass
-    st.error("La vérification CAPTCHA a échoué. Veuillez recommencer." if st.session_state.get("language", "fr") == "fr" else "CAPTCHA verification failed. Please try again.")
-    return False
 from docx import Document
 from docx.shared import Inches, Pt
 from openpyxl import load_workbook
@@ -3317,18 +3281,6 @@ def render_form():
                 "using the “Download the platform charter (PDF)” button."
             )
 
-            captcha_secret, captcha_sitekey = _captcha_secret_and_sitekey()
-            captcha_token = None
-            st.markdown("### Vérification humaine" if st.session_state.language == "fr" else "### Human verification")
-            if captcha_sitekey and captcha_secret:
-                captcha_token = hcaptcha_widget(captcha_sitekey, "fr" if st.session_state.language == "fr" else "en")
-                if captcha_token:
-                    st.success("Vérification CAPTCHA effectuée. Vous pouvez soumettre la demande." if st.session_state.language == "fr" else "CAPTCHA completed. You can submit the request.")
-                else:
-                    st.caption("Cochez « Je ne suis pas un robot » et sélectionnez les images demandées si nécessaire." if st.session_state.language == "fr" else "Check ‘I'm not a robot’ and select the requested images if needed.")
-            else:
-                st.warning("Le CAPTCHA n'est pas encore configuré. La soumission sera désactivée jusqu'à l'ajout des clés hCaptcha dans les secrets de l'application." if st.session_state.language == "fr" else "CAPTCHA is not configured yet. Submission will remain disabled until hCaptcha keys are added to app secrets.")
-
             with st.expander(t("all_answers")):
                 answer_labels = {
                     "project_manager": t("manager_last_name"),
@@ -3398,10 +3350,7 @@ def render_form():
                     st.error(f"{t('word_generation_error')} {exc}")
                     document_bytes, filename = None, None
                 if document_bytes is not None:
-                    if st.button(
-                        t("submit"), type="primary", use_container_width=True,
-                        disabled=not bool(captcha_token and captcha_secret and captcha_sitekey),
-                    ) and verify_hcaptcha_token(captcha_token, captcha_secret, captcha_sitekey):
+                    if st.button(t("submit"), type="primary", use_container_width=True):
                         try:
                             ensure_remote_folder("OV-Chimie")
                             ensure_remote_folder("OV-Chimie/E-GES-01")
