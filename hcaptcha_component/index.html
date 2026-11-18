@@ -1,201 +1,104 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <style>
-        html, body {
-            margin: 0;
-            padding: 0;
-            background: transparent;
-            font-family: Arial, sans-serif;
-        }
-
-        #captcha {
-            min-height: 78px;
-        }
-
-        #status {
-            color: #b45309;
-            font-size: 13px;
-            padding-top: 5px;
-            display: none;
-        }
-    </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    html, body { margin: 0; padding: 0; background: transparent; font-family: Arial, sans-serif; }
+    #captcha { min-height: 78px; }
+    #status { color: #b45309; font-size: 13px; padding-top: 4px; display: none; }
+  </style>
 </head>
-
 <body>
+  <div id="captcha"></div>
+  <div id="status"></div>
+  <script>
+    (function () {
+      "use strict";
+      let currentArgs = {};
+      let widgetId = null;
+      let renderedSitekey = null;
+      let renderedLanguage = null;
+      let scriptLoaded = false;
+      let scriptLoading = false;
 
-<div id="captcha"></div>
-<div id="status"></div>
+      function postToStreamlit(type, extra) {
+        window.parent.postMessage(Object.assign({ type: type }, extra || {}), "*");
+      }
 
-<script>
-(function () {
-    "use strict";
+      function setHeight(height) {
+        postToStreamlit("streamlit:setFrameHeight", { height: height });
+      }
 
-    let currentArgs = {};
-    let widgetId = null;
-    let currentSitekey = null;
-    let scriptLoaded = false;
-    let scriptLoading = false;
-
-    function sendToStreamlit(type, extra = {}) {
-        window.parent.postMessage(
-            Object.assign({ type: type }, extra),
-            "*"
-        );
-    }
-
-    function setHeight(height) {
-        sendToStreamlit("streamlit:setFrameHeight", {
-            height: height
-        });
-    }
-
-    function showStatus(message) {
+      function showStatus(message) {
         const status = document.getElementById("status");
         status.textContent = message || "";
         status.style.display = message ? "block" : "none";
-    }
+      }
 
-    function renderCaptcha() {
-        if (!scriptLoaded || !window.hcaptcha) {
-            return;
-        }
-
+      function renderCaptcha() {
+        if (!scriptLoaded || !window.hcaptcha || !currentArgs.sitekey) return;
         const sitekey = currentArgs.sitekey;
-
-        if (!sitekey) {
-            showStatus("Site Key hCaptcha manquante.");
-            return;
-        }
-
-        if (widgetId !== null && sitekey === currentSitekey) {
-            return;
-        }
+        const language = currentArgs.language || "fr";
+        if (widgetId !== null && sitekey === renderedSitekey && language === renderedLanguage) return;
 
         document.getElementById("captcha").innerHTML = "";
         showStatus("");
-
-        try {
-            widgetId = window.hcaptcha.render("captcha", {
-                sitekey: sitekey,
-
-                callback: function (token) {
-                    sendToStreamlit(
-                        "streamlit:setComponentValue",
-                        {
-                            value: token,
-                            dataType: "string"
-                        }
-                    );
-                },
-
-                "expired-callback": function () {
-                    sendToStreamlit(
-                        "streamlit:setComponentValue",
-                        {
-                            value: null,
-                            dataType: "null"
-                        }
-                    );
-                },
-
-                "error-callback": function () {
-                    showStatus(
-                        "Erreur lors du chargement du CAPTCHA. Rechargez la page."
-                    );
-
-                    sendToStreamlit(
-                        "streamlit:setComponentValue",
-                        {
-                            value: null,
-                            dataType: "null"
-                        }
-                    );
-                }
-            });
-
-            currentSitekey = sitekey;
+        widgetId = window.hcaptcha.render("captcha", {
+          sitekey: sitekey,
+          callback: function (token) {
+            postToStreamlit("streamlit:setComponentValue", { value: token, dataType: "string" });
             setHeight(100);
+          },
+          "expired-callback": function () {
+            postToStreamlit("streamlit:setComponentValue", { value: null, dataType: "null" });
+          },
+          "error-callback": function () {
+            showStatus(language === "fr" ? "Le CAPTCHA n'a pas pu être chargé. Rechargez la page." : "CAPTCHA could not load. Please reload the page.");
+            postToStreamlit("streamlit:setComponentValue", { value: null, dataType: "null" });
+          }
+        });
+        renderedSitekey = sitekey;
+        renderedLanguage = language;
+        setHeight(100);
+      }
 
-        } catch (error) {
-            console.error("hCaptcha error:", error);
-
-            showStatus(
-                "Impossible d'afficher hCaptcha."
-            );
-
-            setHeight(120);
-        }
-    }
-
-    function loadHCaptcha() {
-        if (scriptLoaded) {
-            renderCaptcha();
-            return;
-        }
-
-        if (scriptLoading) {
-            return;
-        }
-
+      function loadHCaptcha() {
+        if (scriptLoaded) { renderCaptcha(); return; }
+        if (scriptLoading) return;
         scriptLoading = true;
-
         const script = document.createElement("script");
-
-        script.src =
-            "https://js.hcaptcha.com/1/api.js?render=explicit";
-
+        script.src = "https://js.hcaptcha.com/1/api.js?render=explicit";
         script.async = true;
         script.defer = true;
-
         script.onload = function () {
-            scriptLoading = false;
-            scriptLoaded = true;
-            renderCaptcha();
+          scriptLoading = false;
+          scriptLoaded = true;
+          renderCaptcha();
         };
-
         script.onerror = function () {
-            scriptLoading = false;
-
-            showStatus(
-                "Impossible de charger hCaptcha. Vérifiez votre connexion."
-            );
-
-            setHeight(120);
+          scriptLoading = false;
+          showStatus(currentArgs.language === "fr" ? "Impossible de charger hCaptcha. Vérifiez votre connexion puis rechargez la page." : "Unable to load hCaptcha. Check your connection and reload the page.");
+          setHeight(120);
         };
-
         document.head.appendChild(script);
-    }
+      }
 
-    window.addEventListener("message", function (event) {
-
-        if (!event.data) {
-            return;
-        }
-
-        if (event.data.type !== "streamlit:render") {
-            return;
-        }
-
+      window.addEventListener("message", function (event) {
+        if (!event.data || event.data.type !== "streamlit:render") return;
         currentArgs = event.data.args || {};
-
-        loadHCaptcha();
-    });
-
-    // Inform Streamlit that the component is ready
-    sendToStreamlit(
-        "streamlit:componentReady",
-        {
-            apiVersion: 1
+        if (!currentArgs.sitekey) {
+          showStatus(currentArgs.language === "fr" ? "Clé hCaptcha manquante." : "Missing hCaptcha site key.");
+          setHeight(100);
+          return;
         }
-    );
+        loadHCaptcha();
+      });
 
-    setHeight(100);
-
-})();
-</script>
-
+      // Signal readiness only after the event listener is installed.
+      postToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+      setHeight(100);
+    })();
+  </script>
 </body>
 </html>
