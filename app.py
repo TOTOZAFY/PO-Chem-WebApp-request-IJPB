@@ -1,20 +1,39 @@
-import os
-import shutil
-import subprocess
-import tempfile
-import re
-import ssl
-import smtplib
-import json
-import uuid
-import unicodedata
-from datetime import date, datetime
-from email.message import EmailMessage
-from io import BytesIO
-from urllib.parse import quote
+# Cloudflare Turnstile component (local frontend; token verified server-side).
+_TURNSTILE_COMPONENT = components.declare_component(
+    "po_chem_turnstile", path=os.path.join(os.path.dirname(__file__), "turnstile_component")
+)
 
-import requests
-import streamlit as st
+def turnstile_widget(sitekey: str, language: str = "fr"):
+    return _TURNSTILE_COMPONENT(sitekey=sitekey, language=language, default=None, key="po_chem_turnstile_widget")
+
+def _turnstile_secret_and_sitekey():
+    try:
+        secret = st.secrets.get("TURNSTILE_SECRET", "")
+        sitekey = st.secrets.get("TURNSTILE_SITEKEY", "")
+    except Exception:
+        secret, sitekey = "", ""
+    return str(secret or "").strip(), str(sitekey or "").strip()
+
+def verify_turnstile_token(token: str, secret: str) -> bool:
+    if not token or not secret:
+        st.error("La vérification humaine n'est pas configurée ou n'a pas été validée." if st.session_state.get("language", "fr") == "fr" else "Human verification is not configured or has not been completed.")
+        return False
+    try:
+        response = requests.post(
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+            json={"secret": secret, "response": token, "idempotency_key": str(uuid.uuid4())},
+            timeout=10,
+        )
+        response.raise_for_status()
+        result = response.json()
+        if result.get("success") is True:
+            return True
+        # Keep a diagnostic in server logs, without exposing the secret/token.
+        print("Turnstile validation failed:", result.get("error-codes", []))
+    except Exception as exc:
+        print("Turnstile validation request error:", type(exc).__name__)
+    st.error("La vérification Cloudflare a échoué. Veuillez recommencer." if st.session_state.get("language", "fr") == "fr" else "Cloudflare verification failed. Please try again.")
+    return False
 from docx import Document
 from docx.shared import Inches, Pt
 from openpyxl import load_workbook
@@ -3281,6 +3300,18 @@ def render_form():
                 "using the “Download the platform charter (PDF)” button."
             )
 
+            captcha_secret, captcha_sitekey = _turnstile_secret_and_sitekey()
+            captcha_token = None
+            st.markdown("### Vérification humaine" if st.session_state.language == "fr" else "### Human verification")
+            if captcha_sitekey and captcha_secret:
+                captcha_token = turnstile_widget(captcha_sitekey, "fr" if st.session_state.language == "fr" else "en")
+                if captcha_token:
+                    st.success("Vérification CAPTCHA effectuée. Vous pouvez soumettre la demande." if st.session_state.language == "fr" else "CAPTCHA completed. You can submit the request.")
+                else:
+                    st.caption("Cochez « Je ne suis pas un robot » et sélectionnez les images demandées si nécessaire." if st.session_state.language == "fr" else "Check ‘I'm not a robot’ and select the requested images if needed.")
+            else:
+                st.warning("Cloudflare Turnstile n'est pas configuré. La soumission sera désactivée jusqu'à l'ajout des clés TURNSTILE dans les secrets de l'application." if st.session_state.language == "fr" else "Cloudflare Turnstile is not configured yet. Submission will remain disabled until TURNSTILE keys are added to app secrets.")
+
             with st.expander(t("all_answers")):
                 answer_labels = {
                     "project_manager": t("manager_last_name"),
@@ -3350,7 +3381,10 @@ def render_form():
                     st.error(f"{t('word_generation_error')} {exc}")
                     document_bytes, filename = None, None
                 if document_bytes is not None:
-                    if st.button(t("submit"), type="primary", use_container_width=True):
+                    if st.button(
+                        t("submit"), type="primary", use_container_width=True,
+                        disabled=not bool(captcha_token and captcha_secret and captcha_sitekey),
+                    ) and verify_turnstile_token(captcha_token, captcha_secret):
                         try:
                             ensure_remote_folder("OV-Chimie")
                             ensure_remote_folder("OV-Chimie/E-GES-01")

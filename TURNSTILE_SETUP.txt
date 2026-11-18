@@ -1,0 +1,15 @@
+Cloudflare Turnstile setup for PO-Chem WebApp
+
+1. In Cloudflare dashboard, open Turnstile and create a widget.
+2. Widget name: PO-Chem WebApp. Widget type: Managed (recommended).
+3. Add hostname: po-chem-webapp-request-ijpb.streamlit.app
+4. Create the widget and copy its Sitekey and Secret key.
+5. In Streamlit Cloud > app > Settings > Secrets, add:
+
+TURNSTILE_SITEKEY = "your_public_sitekey"
+TURNSTILE_SECRET = "your_private_secret"
+
+Do not share or commit the secret key. Remove the old HCAPTCHA_SITEKEY and HCAPTCHA_SECRET entries once Turnstile is working.
+6. Save Secrets and allow Streamlit to restart. Then reload the app with Ctrl+Shift+R.
+
+Turnstile tokens are validated server-side through Cloudflare Siteverify.
