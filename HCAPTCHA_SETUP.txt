@@ -1,0 +1,12 @@
+hCaptcha setup for PO-Chem-WebApp
+
+1. Create an hCaptcha account and add the public hostname(s) used by the Streamlit app.
+2. Copy the Site Key and Secret Key from the hCaptcha dashboard.
+3. In the hosting platform's Streamlit secrets configuration, add:
+
+HCAPTCHA_SITEKEY = "your_site_key"
+HCAPTCHA_SECRET = "your_secret_key"
+
+For local testing, create .streamlit/secrets.toml with the same entries. Do not commit this file.
+
+The app displays the hCaptcha checkbox. Depending on hCaptcha's risk assessment, it may ask the user to select images. The submit button is disabled until the widget returns a token. On submission, the token is checked server-side against hCaptcha Siteverify; only a successful server verification allows the request to be saved to Nextcloud and notifications to be sent. Tokens are single-use and may expire, so the user may need to solve the CAPTCHA again after an error.
