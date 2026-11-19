@@ -921,6 +921,50 @@ def build_document(form_data):
     guidance_cell = table.cell(7, 0)
     add_to_existing_paragraph(guidance_cell.paragraphs[0], f"{t('answer_prefix')} {form_data.get('guidance', 'NO')}", bold=True)
 
+    # Add a trace of the platform charter acceptance to the final request PDF.
+    # These fields are populated only at the actual submission event.
+    charter_accepted_at = str(form_data.get("charter_accepted_at", "") or "").strip()
+    if charter_accepted_at:
+        acceptance_title = (
+            "Acceptation de la charte de la plateforme"
+            if st.session_state.get("language", "fr") == "fr"
+            else "Platform charter acceptance"
+        )
+        acceptance_name_label = (
+            "Nom et prénom du responsable"
+            if st.session_state.get("language", "fr") == "fr"
+            else "Project manager full name"
+        )
+        acceptance_date_label = (
+            "Date et heure d'acceptation"
+            if st.session_state.get("language", "fr") == "fr"
+            else "Acceptance date and time"
+        )
+        acceptance_statement = (
+            "Le responsable confirme avoir lu et accepté la charte de la plateforme lors de la soumission de cette demande."
+            if st.session_state.get("language", "fr") == "fr"
+            else "The project manager confirms having read and accepted the platform charter when submitting this request."
+        )
+        acceptance_heading = doc.add_paragraph()
+        acceptance_heading.paragraph_format.space_before = Pt(10)
+        acceptance_heading.paragraph_format.space_after = Pt(4)
+        acceptance_heading.add_run(acceptance_title).bold = True
+        acceptance_paragraph = doc.add_paragraph(acceptance_statement)
+        acceptance_paragraph.paragraph_format.space_after = Pt(3)
+        acceptance_name = doc.add_paragraph()
+        acceptance_name.add_run(f"{acceptance_name_label} : ").bold = True
+        acceptance_name.add_run(
+            " ".join(
+                part for part in (
+                    str(form_data.get("project_manager_first_name", "")).strip(),
+                    str(form_data.get("project_manager", "")).strip(),
+                ) if part
+            )
+        )
+        acceptance_date = doc.add_paragraph()
+        acceptance_date.add_run(f"{acceptance_date_label} : ").bold = True
+        acceptance_date.add_run(charter_accepted_at)
+
     # New naming convention: REQ-<unique identifier>-<date>-<time>-<requester>-<project>-<lab>.
     request_id = form_data.get("request_id", "REQ-SANS-ID")
     manager_name = filename_part(form_data.get("project_manager"), "DEMANDEUR")
@@ -3505,7 +3549,10 @@ def render_form():
                 try:
                     document_bytes, filename = build_document(data)
                     st.download_button(
-                        t("download"), data=document_bytes, file_name=filename,
+                        "Télécharger un aperçu du PDF (sans preuve d'acceptation)"
+                        if st.session_state.language == "fr"
+                        else "Download PDF preview (without acceptance record)",
+                        data=document_bytes, file_name=filename,
                         mime="application/pdf",
                         use_container_width=True,
                     )
@@ -3594,6 +3641,14 @@ def render_form():
                     )
                 else:
                     try:
+                        # Capture the acceptance moment once, at the actual submission,
+                        # and reuse the exact same timestamp in the PDF and Nextcloud metadata.
+                        charter_accepted_at = datetime.now().astimezone().isoformat(timespec="seconds")
+                        data["charter_accepted_at"] = charter_accepted_at
+                        data["charter_accepted_by_first_name"] = str(data.get("project_manager_first_name", "")).strip()
+                        data["charter_accepted_by_last_name"] = str(data.get("project_manager", "")).strip()
+                        document_bytes, filename = build_document(data)
+
                         ensure_remote_folder("OV-Chimie")
                         ensure_remote_folder("OV-Chimie/E-GES-01")
                         ensure_remote_folder(CLOUD_FOLDER)
@@ -3624,7 +3679,9 @@ def render_form():
                             "status": "pending",
                             "admin_comment": "",
                             "charter_accepted": True,
-                            "charter_accepted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                            "charter_accepted_at": charter_accepted_at,
+                            "charter_accepted_by_first_name": data.get("charter_accepted_by_first_name", ""),
+                            "charter_accepted_by_last_name": data.get("charter_accepted_by_last_name", ""),
                             "document_path": remote_file,
                             "filename": filename,
                         }
@@ -3712,8 +3769,16 @@ def render_form():
 
     if st.session_state.get("last_submission"):
         last = st.session_state.last_submission
+        st.success(
+            "Votre demande a été soumise. Le PDF définitif contient la trace de votre acceptation de la charte."
+            if st.session_state.language == "fr"
+            else "Your request has been submitted. The final PDF includes the record of your charter acceptance."
+        )
         st.download_button(
-            t("download"), data=last["document"], file_name=last["filename"],
+            "Télécharger le PDF définitif avec la trace d'acceptation"
+            if st.session_state.language == "fr"
+            else "Download final PDF with acceptance record",
+            data=last["document"], file_name=last["filename"],
             mime="application/pdf",
             key="download_after_submit",
         )
