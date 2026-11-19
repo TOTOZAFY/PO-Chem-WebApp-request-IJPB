@@ -4015,56 +4015,34 @@ if os.path.isfile(_charter_path):
             use_container_width=True,
         )
 
-# Personal-data information notice displayed directly below the charter download
-# in the sidebar, as requested. Bilingual content follows the selected UI language.
+# Personal-data information notice is maintained in a separate editable TXT file.
+# Keep [FR] and [EN] markers in NOTICE_PROTECTION_DONNEES.txt.
+_notice_path = os.path.join(os.path.dirname(__file__), "NOTICE_PROTECTION_DONNEES.txt")
 with st.sidebar.expander(
     "Protection des données personnelles" if _footer_fr else "Personal data protection",
     expanded=False,
 ):
-    if _footer_fr:
-        st.markdown("""
-**Responsable du traitement**  
-INRAE – Plateforme OV-Chimie-Métabolisme / IJPB. Les coordonnées du contact institutionnel et du délégué à la protection des données doivent être précisées dans la version définitive de cette notice.
+    try:
+        with open(_notice_path, "r", encoding="utf-8") as _notice_file:
+            _notice_content = _notice_file.read()
+        _notice_marker = "[FR]" if _footer_fr else "[EN]"
+        _other_marker = "[EN]" if _footer_fr else "[FR]"
+        _notice_start = _notice_content.find(_notice_marker)
+        _notice_end = _notice_content.find(_other_marker, _notice_start + len(_notice_marker))
+        if _notice_start < 0:
+            raise ValueError(f"Section {_notice_marker} missing from notice file")
+        if _notice_end < 0:
+            _notice_text = _notice_content[_notice_start + len(_notice_marker):].strip()
+        else:
+            _notice_text = _notice_content[_notice_start + len(_notice_marker):_notice_end].strip()
+        st.markdown(_notice_text)
+    except Exception as _notice_error:
+        st.error(
+            f"Impossible de charger NOTICE_PROTECTION_DONNEES.txt : {_notice_error}"
+            if _footer_fr else
+            f"Could not load NOTICE_PROTECTION_DONNEES.txt: {_notice_error}"
+        )
 
-**Données collectées**  
-Les informations saisies dans ce formulaire peuvent inclure le nom et le prénom du responsable, son adresse e-mail et son numéro de téléphone professionnels, les coordonnées du personnel administratif, le laboratoire ou groupe, le nom et la description du projet, les informations relatives aux analyses et aux échantillons, ainsi que les échanges associés à la demande.
-
-**Finalités**  
-Ces données sont utilisées pour recevoir et instruire la demande, vérifier l'adresse e-mail du responsable, contacter les personnes concernées, organiser les analyses, assurer le suivi administratif et communiquer les informations relatives au traitement de la demande.
-
-**Destinataires et stockage**  
-Les données sont accessibles aux personnes habilitées de la plateforme qui en ont besoin pour traiter la demande. Les documents et métadonnées de la demande sont stockés dans l'espace Nextcloud utilisé par la plateforme. Certaines informations peuvent également figurer dans les courriels de notification et de suivi adressés aux destinataires concernés.
-
-**Durée de conservation**  
-La durée de conservation doit être définie et validée par INRAE en fonction des obligations applicables et des besoins de suivi. À compléter avant publication définitive : **[indiquer la durée de conservation validée]**.
-
-**Droits des personnes**  
-Conformément à la réglementation applicable en matière de protection des données, les personnes concernées peuvent exercer leurs droits auprès du contact compétent d'INRAE ou du délégué à la protection des données. À compléter avant publication : **[indiquer l'adresse de contact du DPO / le lien institutionnel]**.
-
-Cette notice est une proposition de travail et doit être validée par le DPO d'INRAE avant sa publication.
-""")
-    else:
-        st.markdown("""
-**Data controller**  
-INRAE – OV Chemistry-Metabolism Platform / IJPB. The institutional contact details and the Data Protection Officer's contact details must be specified in the final version of this notice.
-
-**Data collected**  
-Information entered in this form may include the project manager's first and last name, professional email address and telephone number, administrative staff contact details, laboratory or group, project name and description, information about requested analyses and samples, and communications relating to the request.
-
-**Purposes**  
-The data are used to receive and process the request, verify the project manager's email address, contact the relevant people, organise analyses, provide administrative follow-up and communicate information about the request.
-
-**Recipients and storage**  
-The data are accessible to authorised platform staff who need them to process the request. Request documents and metadata are stored in the Nextcloud space used by the platform. Some information may also appear in notification and follow-up emails sent to the relevant recipients.
-
-**Retention period**  
-The retention period must be defined and approved by INRAE in accordance with applicable obligations and follow-up requirements. To be completed before final publication: **[insert the approved retention period]**.
-
-**Data subject rights**  
-Under applicable data-protection regulations, individuals may exercise their rights by contacting the relevant INRAE contact or the Data Protection Officer. To be completed before publication: **[insert the DPO contact address / institutional link]**.
-
-This notice is a working draft and must be approved by INRAE's Data Protection Officer before publication.
-""")
 
 if st.query_params.get("fair_token"):
     try:
