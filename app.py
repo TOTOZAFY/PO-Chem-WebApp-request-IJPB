@@ -4042,7 +4042,7 @@ with st.sidebar.expander(
         if _wanted_index < 0:
             raise ValueError(f"Section {_wanted_marker} missing from NOTICE_PROTECTION_DONNEES.txt")
 
-        _notice_text = "\\n".join(_notice_lines[_wanted_index + 1:_other_index]).strip()
+        _notice_text = "\n".join(_notice_lines[_wanted_index + 1:_other_index]).strip()
         if not _notice_text:
             raise ValueError(f"Section {_wanted_marker} is empty in NOTICE_PROTECTION_DONNEES.txt")
         st.markdown(_notice_text)
