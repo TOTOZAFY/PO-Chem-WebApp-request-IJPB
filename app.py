@@ -4016,7 +4016,7 @@ if os.path.isfile(_charter_path):
         )
 
 # Personal-data information notice is maintained in a separate editable TXT file.
-# Keep [FR] and [EN] markers in NOTICE_PROTECTION_DONNEES.txt.
+# The language markers must appear alone on their own lines.
 _notice_path = os.path.join(os.path.dirname(__file__), "NOTICE_PROTECTION_DONNEES.txt")
 with st.sidebar.expander(
     "Protection des données personnelles" if _footer_fr else "Personal data protection",
@@ -4024,17 +4024,27 @@ with st.sidebar.expander(
 ):
     try:
         with open(_notice_path, "r", encoding="utf-8") as _notice_file:
-            _notice_content = _notice_file.read()
-        _notice_marker = "[FR]" if _footer_fr else "[EN]"
+            _notice_lines = _notice_file.read().splitlines()
+
+        # Match marker lines exactly. Do not use substring search: the marker
+        # names are also mentioned in the TXT file's editable instructions.
+        _wanted_marker = "[FR]" if _footer_fr else "[EN]"
         _other_marker = "[EN]" if _footer_fr else "[FR]"
-        _notice_start = _notice_content.find(_notice_marker)
-        _notice_end = _notice_content.find(_other_marker, _notice_start + len(_notice_marker))
-        if _notice_start < 0:
-            raise ValueError(f"Section {_notice_marker} missing from notice file")
-        if _notice_end < 0:
-            _notice_text = _notice_content[_notice_start + len(_notice_marker):].strip()
-        else:
-            _notice_text = _notice_content[_notice_start + len(_notice_marker):_notice_end].strip()
+        _wanted_index = next(
+            (i for i, line in enumerate(_notice_lines) if line.strip() == _wanted_marker),
+            -1,
+        )
+        _other_index = next(
+            (i for i, line in enumerate(_notice_lines) if i > _wanted_index and line.strip() == _other_marker),
+            len(_notice_lines),
+        ) if _wanted_index >= 0 else -1
+
+        if _wanted_index < 0:
+            raise ValueError(f"Section {_wanted_marker} missing from NOTICE_PROTECTION_DONNEES.txt")
+
+        _notice_text = "\\n".join(_notice_lines[_wanted_index + 1:_other_index]).strip()
+        if not _notice_text:
+            raise ValueError(f"Section {_wanted_marker} is empty in NOTICE_PROTECTION_DONNEES.txt")
         st.markdown(_notice_text)
     except Exception as _notice_error:
         st.error(
