@@ -3467,6 +3467,19 @@ def render_form():
                 value=False,
                 key="charter_accepted_checkbox",
             )
+            # Update the preview acceptance record immediately on checkbox reruns.
+            # Keep one timestamp while checked; clear it if the user unchecks the box.
+            if charter_accepted:
+                if not st.session_state.get("preview_charter_accepted_at"):
+                    st.session_state["preview_charter_accepted_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                data["charter_accepted_at"] = st.session_state["preview_charter_accepted_at"]
+                data["charter_accepted_by_first_name"] = str(data.get("project_manager_first_name", "")).strip()
+                data["charter_accepted_by_last_name"] = str(data.get("project_manager", "")).strip()
+            else:
+                st.session_state.pop("preview_charter_accepted_at", None)
+                data.pop("charter_accepted_at", None)
+                data.pop("charter_accepted_by_first_name", None)
+                data.pop("charter_accepted_by_last_name", None)
             st.caption(
                 "La charte est disponible dans le menu latéral, sous le logo de la plateforme, "
                 "en cliquant sur « Télécharger la charte de la plate-forme (PDF) »."
@@ -3549,9 +3562,17 @@ def render_form():
                 try:
                     document_bytes, filename = build_document(data)
                     st.download_button(
-                        "Télécharger un aperçu du PDF (sans preuve d'acceptation)"
+                        (
+                            "Télécharger l’aperçu du PDF (avec preuve d’acceptation)"
+                            if charter_accepted
+                            else "Télécharger un aperçu du PDF (sans preuve d'acceptation)"
+                        )
                         if st.session_state.language == "fr"
-                        else "Download PDF preview (without acceptance record)",
+                        else (
+                            "Download PDF preview (with acceptance record)"
+                            if charter_accepted
+                            else "Download PDF preview (without acceptance record)"
+                        ),
                         data=document_bytes, file_name=filename,
                         mime="application/pdf",
                         use_container_width=True,
