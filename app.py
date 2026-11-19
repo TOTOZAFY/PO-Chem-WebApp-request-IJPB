@@ -3467,6 +3467,13 @@ def render_form():
                 value=False,
                 key="charter_accepted_checkbox",
             )
+            st.caption(
+                "L’acceptation de la charte ne vous engage pas à poursuivre la démarche. "
+                "Seuls le devis signé et le bon de commande feront foi."
+                if st.session_state.language == "fr"
+                else "Accepting the charter does not commit you to proceeding with the process. "
+                "Only the signed quotation and purchase order will constitute confirmation."
+            )
             # Update the preview acceptance record immediately on checkbox reruns.
             # Keep one timestamp while checked; clear it if the user unchecks the box.
             if charter_accepted:
