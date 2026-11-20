@@ -121,9 +121,9 @@ TRANSLATIONS = {
                   "Informations complémentaires", "Vérification & soumission"],
         "general": "1. Informations générales", "requester_section": "Demandeur", "administrator_section": "Plateforme Observatoire du végétal chimie et métabolisme", "manager": "Responsable du projet *", "manager_last_name": "Nom *", "manager_first_name": "Prénom *",
         "visibility": "Type de laboratoire *",
-        "visibility_private": "Privée",
-        "visibility_public": "Publique",
-        "visibility_ijpb": "Publique (IJPB)",
+        "visibility_private": "Non public",
+        "visibility_public": "Public",
+        "visibility_ijpb": "Public (IJPB)",
         "group": "Groupe / laboratoire *", "group_address": "Adresse du laboratoire ou du groupe *", "date": "Date", "phone": "Téléphone",
         "manager_email": "E-mail du responsable *", "admin_staff": "Personnel administratif",
         "admin_phone": "Téléphone du personnel administratif", "admin_email": "E-mail du personnel administratif (facultatif)",
@@ -3123,7 +3123,7 @@ def render_admin():
 
     type_column = "Type d'analyse" if is_fr else "Analysis type"
     public_column = "Prix public" if is_fr else "Public price"
-    private_column = "Prix privé" if is_fr else "Private price"
+    private_column = "Prix non public" if is_fr else "Non-public price"
     inrae_column = "Prix public (IJPB)" if is_fr else "Public price (IJPB)"
     catalog_rows = []
     for analysis_type in managed_types:
@@ -3140,7 +3140,7 @@ def render_admin():
         })
 
     st.caption(
-        "Correspondance avec le type de laboratoire : Privée → Prix privé ; Publique → Prix public ; Publique (IJPB) → Prix public (IJPB). "
+        "Correspondance avec le type de laboratoire : Non public → Prix non public ; Public → Prix public ; Public (IJPB) → Prix public (IJPB). "
         "Saisissez les tarifs unitaires en euros. Les cellules vides correspondent à un tarif non renseigné."
         if is_fr else
         "Mapping to laboratory type: Private → Private price; Public → Public price; Public (IJPB) → Public price (IJPB). "
@@ -3160,7 +3160,7 @@ def render_admin():
                 min_value=0.0, step=0.01, format="%.2f €"
             ),
             private_column: st.column_config.NumberColumn(
-                "Prix privé (€)" if is_fr else "Private price (€)",
+                "Prix non public (€)" if is_fr else "Non-public price (€)",
                 min_value=0.0, step=0.01, format="%.2f €"
             ),
             inrae_column: st.column_config.NumberColumn(
@@ -3376,13 +3376,13 @@ def render_admin():
         "Public (IJPB) - not funded",
     )
     revenue_labels = {
-        "Privée": "Privée" if is_fr else "Private",
-        "Public": "Publique" if is_fr else "Public",
+        "Privée": "Non public" if is_fr else "Non-public",
+        "Public": "Public" if is_fr else "Public",
         "Public (IJPB) - funded": (
-            "Publique (IJPB) — projet financé" if is_fr else "Public (IJPB) — funded project"
+            "Public (IJPB) — projet financé" if is_fr else "Public (IJPB) — funded project"
         ),
         "Public (IJPB) - not funded": (
-            "Publique (IJPB) — projet non financé" if is_fr else "Public (IJPB) — non-funded project"
+            "Public (IJPB) — projet non financé" if is_fr else "Public (IJPB) — non-funded project"
         ),
     }
     annual_revenue = {}
