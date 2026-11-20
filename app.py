@@ -4084,7 +4084,7 @@ def render_purchase_order_import():
         key="requester_purchase_order_reference",
     ).strip()
 
-    email_is_valid = bool(re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", requester_email))
+    email_is_valid = bool(re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", requester_email))
     matching_record = None
     reference_check_error = None
     if email_is_valid and request_reference:
