@@ -766,6 +766,29 @@ def join_email_recipients(*addresses):
                 result.append(item)
     return ", ".join(result) or None
 
+def add_application_link_to_requester_email(body, language="fr"):
+    """Append the public application URL to requester-facing emails."""
+    app_url = str(get_secret("APP_BASE_URL", "") or "").strip().rstrip("/")
+    if not app_url:
+        return body
+    # FAIR emails may already contain a secure direct link to this application.
+    if app_url in str(body):
+        return body
+    if language == "fr":
+        reminder = (
+            "\\n\\nVous pouvez accéder à l’application PO-Chem via le lien suivant :\\n"
+            f"{app_url}\\n"
+            "Conservez la référence complète de votre demande pour vos prochaines démarches."
+        )
+    else:
+        reminder = (
+            "\\n\\nYou can access the PO-Chem application using the following link:\\n"
+            f"{app_url}\\n"
+            "Keep your full request reference for your next steps."
+        )
+    return str(body).rstrip() + reminder
+
+
 def send_email(to_address, subject, body, cc=None, reply_to=None, attachments=None):
     cfg = get_secret("smtp", {})
     if not cfg or not all(cfg.get(k) for k in ("host", "username", "password", "sender")):
@@ -2443,7 +2466,7 @@ def render_admin():
                                                 "Open the application, select the FAIR menu, then enter this reference and your requester email address.\n\n"
                                                 "Secure direct access: \n" + link
                                             )
-                                        send_email(record.get("manager_email", ""), subject, body)
+                                        send_email(record.get("manager_email", ""), subject, add_application_link_to_requester_email(body, st.session_state.language))
                                         record["fair_status"] = "requested"; record["fair_requested_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
                                         save_metadata(records)
                                         st.success("Demande FAIR envoyée." if st.session_state.language == "fr" else "FAIR completion request sent.")
@@ -2616,7 +2639,8 @@ def render_admin():
                                         else t("mail_user_subject")
                                     )
                                     send_email(
-                                        email, mail_subject, body,
+                                        email, mail_subject,
+                                        add_application_link_to_requester_email(body, st.session_state.language),
                                         cc=join_email_recipients(*cc_addresses),
                                     )
                                     st.success(t("decision_saved"))
@@ -2730,14 +2754,14 @@ def render_admin():
                             key=f"unsigned_quote_upload_{selected_id}",
                         )
                         default_unsigned_quote_comment = (
-                            "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre devis signé et bon de commande via ce lien https://po-chem-webapp-request-ijpb.streamlit.app en utilisant votre adresse mail de demande ainsi que la référence de votre demande."
+                            "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre devis signé et bon de commande via l'interface en utilisant votre adresse mail de demande ainsi que la référence de votre demande."
                             if st.session_state.language == "fr"
-                            else "Please find the quotation corresponding to your request. After approval and signature, please send us your signed quotation and purchase order through the link https://po-chem-webapp-request-ijpb.streamlit.app/ using your request email address and request reference."
+                            else "Please find the quotation corresponding to your request. After approval and signature, please send us your signed quotation and purchase order through the interface using your request email address and request reference."
                         )
                         saved_unsigned_quote_comment = str(record.get("unsigned_quote_comment") or "").strip()
                         legacy_unsigned_quote_comments = {
-                            "voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via ce lien https://po-chem-webapp-request-ijpb.streamlit.app",
-                            "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via ce lien https://po-chem-webapp-request-ijpb.streamlit.app",
+                            "voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via l'interface",
+                            "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via l'interface",
                         }
                         if saved_unsigned_quote_comment in legacy_unsigned_quote_comments:
                             saved_unsigned_quote_comment = ""
@@ -2817,7 +2841,7 @@ def render_admin():
                                 send_email(
                                     record.get("manager_email", "").strip(),
                                     mail_subject,
-                                    mail_body,
+                                    add_application_link_to_requester_email(mail_body, st.session_state.language),
                                     cc=quote_cc,
                                     attachments=[(unsigned_quote_file.name, quote_bytes, unsigned_quote_file.type)],
                                 )
@@ -4621,7 +4645,7 @@ def render_purchase_order_import():
                 f"Your documents have been saved in the OV-Chimie platform's Nextcloud space.\n\n"
                 f"Best regards,\nThe OV-Chimie team"
             )
-            send_email(requester_email, requester_subject, requester_body)
+            send_email(requester_email, requester_subject, add_application_link_to_requester_email(requester_body, "fr" if fr else "en"))
         except Exception as mail_exc:
             notification_errors.append(
                 ("Confirmation au demandeur : " if fr else "Requester confirmation: ") + str(mail_exc)
