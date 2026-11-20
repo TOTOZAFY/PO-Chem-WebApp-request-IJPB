@@ -2862,9 +2862,16 @@ def render_admin():
                         else "Please find the quotation corresponding to your request. After approval and signature, please send us your purchase order through the interface using your request email address and request reference.\n\n"
                         "The attached quotation is unsigned. Only the signed quotation and purchase order will be considered valid."
                     )
+                    saved_unsigned_quote_comment = str(record.get("unsigned_quote_comment") or "").strip()
+                    legacy_unsigned_quote_comments = {
+                        "voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via l'interface",
+                        "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via l'interface",
+                    }
+                    if saved_unsigned_quote_comment in legacy_unsigned_quote_comments:
+                        saved_unsigned_quote_comment = ""
                     unsigned_quote_comment = st.text_area(
                         "Commentaire à l’intention du demandeur" if st.session_state.language == "fr" else "Comment for the requester",
-                        value=record.get("unsigned_quote_comment") or default_unsigned_quote_comment,
+                        value=saved_unsigned_quote_comment or default_unsigned_quote_comment,
                         help="Ce commentaire sera inclus dans l’e-mail envoyé avec le devis. Tu peux le modifier avant l’envoi." if st.session_state.language == "fr" else "This comment will be included in the email sent with the quotation. You can edit it before sending.",
                         key=f"unsigned_quote_comment_{selected_id}",
                     )
@@ -2901,6 +2908,7 @@ def render_admin():
                                     f"Projet : {record.get('project_name', '—')}\n"
                                     f"Fichier joint : {unsigned_quote_file.name}\n\n"
                                     f"Commentaire de la plateforme :\n{unsigned_quote_comment.strip() or 'Aucun commentaire.'}\n\n"
+                                    "Le devis joint est non signé. Seul le devis signé et bon de commande feront foi.\n\n"
                                     "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
                                 )
                             else:
@@ -2912,7 +2920,7 @@ def render_admin():
                                     f"Project: {record.get('project_name', '—')}\n"
                                     f"Attached file: {unsigned_quote_file.name}\n\n"
                                     f"Message from the platform:\n{unsigned_quote_comment.strip() or 'No comment.'}\n\n"
-                                    "The attached quotation is unsigned. Only the signed quotation is authoritative.\n\n"
+                                    "The attached quotation is unsigned. Only the signed quotation and purchase order will be considered valid.\n\n"
                                     "Best regards,\nOV-Chimie-Metabolisme Platform"
                                 )
                             quote_cc = join_email_recipients(
