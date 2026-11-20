@@ -4195,13 +4195,13 @@ def render_fair_profile_manager(sheet):
                         st.error(("Impossible de supprimer le profil : " if fr else "Could not delete profile: ") + str(exc))
 
 def render_purchase_order_import():
-    """Public requester portal to attach a purchase order to an existing request."""
+    """Public requester portal to attach a signed quotation and/or purchase order to an existing request."""
     fr = st.session_state.get("language", "fr") == "fr"
-    st.title("Importation de bon de commande" if fr else "Purchase order upload")
+    st.title("Importation du devis signé et/ou du bon de commande" if fr else "Upload signed quotation and/or purchase order")
     st.write(
-        "Renseignez l’adresse e-mail utilisée lors de la demande et la référence complète (identifiant — demandeur — projet — laboratoire), puis importez le bon de commande."
+        "Renseignez l’adresse e-mail utilisée lors de la demande et la référence complète, puis importez le devis signé et/ou le bon de commande."
         if fr else
-        "Enter the email address used for the request and the full reference (ID — requester — project — laboratory), then upload the purchase order."
+        "Enter the email address used for the request and the full reference, then upload the signed quotation and/or purchase order."
     )
     requester_email = st.text_input(
         "Adresse e-mail du demandeur *" if fr else "Requester email address *",
@@ -4247,9 +4247,9 @@ def render_purchase_order_import():
         st.warning("L’adresse e-mail n’est pas valide." if fr else "The email address is not valid.")
     elif reference_is_valid:
         st.success(
-            f"Demande {public_request_reference(matching_record)} reconnue. Vous pouvez importer le bon de commande."
+            f"Demande {public_request_reference(matching_record)} reconnue. Vous pouvez importer le devis signé et/ou le bon de commande."
             if fr else
-            f"Request {public_request_reference(matching_record)} verified. You can upload the purchase order."
+            f"Request {public_request_reference(matching_record)} verified. You can upload the signed quotation and/or purchase order."
         )
     else:
         st.error(
@@ -4258,24 +4258,31 @@ def render_purchase_order_import():
             "No request matches this reference and email address. The submit button remains disabled."
         )
 
+    signed_quote_file = st.file_uploader(
+        "Devis signé (PDF, DOC ou DOCX) — facultatif" if fr else "Signed quotation (PDF, DOC or DOCX) — optional",
+        type=["pdf", "doc", "docx"],
+        key="requester_signed_quote_file",
+        disabled=not reference_is_valid,
+    )
     purchase_order_file = st.file_uploader(
-        "Bon de commande * (PDF, DOC ou DOCX)" if fr else "Purchase order * (PDF, DOC or DOCX)",
+        "Bon de commande (PDF, DOC ou DOCX) — facultatif" if fr else "Purchase order (PDF, DOC or DOCX) — optional",
         type=["pdf", "doc", "docx"],
         key="requester_purchase_order_file",
         disabled=not reference_is_valid,
     )
+    has_uploaded_document = signed_quote_file is not None or purchase_order_file is not None
     submitted = st.button(
-        "Envoyer le bon de commande" if fr else "Submit purchase order",
+        "Envoyer le(s) document(s)" if fr else "Submit document(s)",
         type="primary",
         use_container_width=True,
-        disabled=(not reference_is_valid or purchase_order_file is None or bool(reference_check_error)),
+        disabled=(not reference_is_valid or not has_uploaded_document or bool(reference_check_error)),
         key="requester_purchase_order_submit",
     )
 
     if not submitted:
         return
-    if not requester_email or not request_reference or purchase_order_file is None:
-        st.warning("Les trois champs sont obligatoires." if fr else "All three fields are required.")
+    if not requester_email or not request_reference or not has_uploaded_document:
+        st.warning("Importez au moins un document : devis signé et/ou bon de commande." if fr else "Upload at least one document: signed quotation and/or purchase order.")
         return
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", requester_email):
         st.warning("L’adresse e-mail n’est pas valide." if fr else "The email address is not valid.")
@@ -4296,20 +4303,38 @@ def render_purchase_order_import():
             return
 
         ensure_remote_folder("OV-Chimie")
-        ensure_remote_folder("OV-Chimie/Bons_Commande")
-        safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(purchase_order_file.name)).strip("-") or "bon-commande"
-        new_path = f"OV-Chimie/Bons_Commande/{record['id']}_{safe_original}"
-        upload_response = webdav_request("PUT", new_path, data=purchase_order_file.getvalue())
-        upload_response.raise_for_status()
-
+        uploaded_labels = []
         now = datetime.now().astimezone().isoformat(timespec="seconds")
-        record["purchase_order_path"] = new_path
-        record["purchase_order_filename"] = purchase_order_file.name
-        record["purchase_order_uploaded_by"] = requester_email
-        record["purchase_order_updated_at"] = now
-        record["purchase_order_status"] = "received"
-        record["purchase_order_received"] = True
+
+        if signed_quote_file is not None:
+            ensure_remote_folder("OV-Chimie/Devis_Signes")
+            safe_quote_name = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(signed_quote_file.name)).strip("-") or "devis-signe"
+            signed_quote_path = f"OV-Chimie/Devis_Signes/{record['id']}_{safe_quote_name}"
+            quote_upload = webdav_request("PUT", signed_quote_path, data=signed_quote_file.getvalue())
+            quote_upload.raise_for_status()
+            record["signed_quote_path"] = signed_quote_path
+            record["signed_quote_filename"] = signed_quote_file.name
+            record["signed_quote_uploaded_by"] = requester_email
+            record["signed_quote_updated_at"] = now
+            uploaded_labels.append(("Devis signé", signed_quote_file.name))
+
+        if purchase_order_file is not None:
+            ensure_remote_folder("OV-Chimie/Bons_Commande")
+            safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(purchase_order_file.name)).strip("-") or "bon-commande"
+            new_path = f"OV-Chimie/Bons_Commande/{record['id']}_{safe_original}"
+            upload_response = webdav_request("PUT", new_path, data=purchase_order_file.getvalue())
+            upload_response.raise_for_status()
+            record["purchase_order_path"] = new_path
+            record["purchase_order_filename"] = purchase_order_file.name
+            record["purchase_order_uploaded_by"] = requester_email
+            record["purchase_order_updated_at"] = now
+            record["purchase_order_status"] = "received"
+            record["purchase_order_received"] = True
+            uploaded_labels.append(("Bon de commande", purchase_order_file.name))
+
         save_metadata(records)
+        uploaded_summary_fr = " et ".join(f"{label} : {filename}" for label, filename in uploaded_labels)
+        uploaded_summary_en = " and ".join(f"{'Signed quotation' if label == 'Devis signé' else 'Purchase order'}: {filename}" for label, filename in uploaded_labels)
 
         notification_errors = []
         # Internal notification: IJPB administrative staff is the primary
@@ -4326,45 +4351,41 @@ def render_purchase_order_import():
             operator_email = str(record.get("assigned_operator_email", "")).strip()
             cc = join_email_recipients(DEFAULT_ADMIN_EMAIL, operator_email)
             internal_subject = (
-                f"Bon de commande reçu – {public_request_reference(record)}"
-                if fr else f"Purchase order received – {public_request_reference(record)}"
+                f"Documents reçus – {public_request_reference(record)}"
+                if fr else f"Documents received – {public_request_reference(record)}"
             )
             received_at = datetime.fromisoformat(now).astimezone().strftime("%d/%m/%Y à %H:%M:%S")
             internal_body = (
-                f"Bonjour,\n\n"
-                f"Nous vous informons qu'un bon de commande vient d'être déposé pour la demande suivante :\n\n"
-                f"INFORMATIONS SUR LA DEMANDE\n\n"
-                f"- Référence de la demande : {public_request_reference(record)}\n"
-                f"- Nom du projet : {record.get('project_name', '') or 'Non renseigné'}\n"
-                f"- Laboratoire / Groupe : {record.get('group', '') or 'Non renseigné'}\n"
-                f"- Adresse du laboratoire : {record.get('group_address', '') or 'Non renseignée'}\n"
-                f"- Demandeur : {record.get('project_manager', '') or 'Non renseigné'}\n"
-                f"- Adresse e-mail : {requester_email}\n"
-                f"- Opérateur en charge de l'analyse : {record.get('assigned_operator', '') or 'Non renseigné'}\n\n"
-                f"INFORMATIONS SUR LE BON DE COMMANDE\n\n"
-                f"- Document importé : {purchase_order_file.name}\n"
-                f"- Date de réception : {received_at}\n"
-                f"- Statut du bon de commande : REÇU\n\n"
-                f"Le bon de commande a été enregistré dans l'espace Nextcloud de la plateforme OV-Chimie, associé à la référence de cette demande.\n\n"
-                f"Prochaine étape : le dossier peut désormais poursuivre son traitement administratif et la planification de l'analyse.\n\n"
+                f"Bonjour,\\n\\n"
+                f"Un ou plusieurs documents viennent d'être déposés pour la demande suivante :\\n\\n"
+                f"INFORMATIONS SUR LA DEMANDE\\n\\n"
+                f"- Référence de la demande : {public_request_reference(record)}\\n"
+                f"- Nom du projet : {record.get('project_name', '') or 'Non renseigné'}\\n"
+                f"- Laboratoire / Groupe : {record.get('group', '') or 'Non renseigné'}\\n"
+                f"- Adresse du laboratoire : {record.get('group_address', '') or 'Non renseignée'}\\n"
+                f"- Demandeur : {record.get('project_manager', '') or 'Non renseigné'}\\n"
+                f"- Adresse e-mail : {requester_email}\\n"
+                f"- Opérateur en charge de l'analyse : {record.get('assigned_operator', '') or 'Non renseigné'}\\n\\n"
+                f"DOCUMENT(S) REÇU(S)\\n\\n"
+                f"- {uploaded_summary_fr}\\n"
+                f"- Date de réception : {received_at}\\n\\n"
+                f"Les documents ont été enregistrés dans Nextcloud et associés à la référence de cette demande.\\n\\n"
                 f"Merci de prendre en compte cette mise à jour."
                 if fr else
-                f"Hello,\n\n"
-                f"A purchase order has just been submitted for the following request:\n\n"
-                f"REQUEST INFORMATION\n\n"
-                f"- Request reference: {public_request_reference(record)}\n"
-                f"- Project name: {record.get('project_name', '') or 'Not specified'}\n"
-                f"- Laboratory / Group: {record.get('group', '') or 'Not specified'}\n"
-                f"- Laboratory address: {record.get('group_address', '') or 'Not specified'}\n"
-                f"- Requester: {record.get('project_manager', '') or 'Not specified'}\n"
-                f"- Email address: {requester_email}\n"
-                f"- Analysis operator: {record.get('assigned_operator', '') or 'Not specified'}\n\n"
-                f"PURCHASE ORDER INFORMATION\n\n"
-                f"- Uploaded document: {purchase_order_file.name}\n"
-                f"- Date received: {datetime.fromisoformat(now).astimezone().strftime('%d/%m/%Y at %H:%M:%S')}\n"
-                f"- Purchase order status: RECEIVED\n\n"
-                f"The purchase order has been saved in the OV-Chimie platform's Nextcloud space and linked to this request reference.\n\n"
-                f"Next step: the file can now proceed through administrative processing and analysis scheduling.\n\n"
+                f"Hello,\\n\\n"
+                f"One or more documents have just been submitted for the following request:\\n\\n"
+                f"REQUEST INFORMATION\\n\\n"
+                f"- Request reference: {public_request_reference(record)}\\n"
+                f"- Project name: {record.get('project_name', '') or 'Not specified'}\\n"
+                f"- Laboratory / Group: {record.get('group', '') or 'Not specified'}\\n"
+                f"- Laboratory address: {record.get('group_address', '') or 'Not specified'}\\n"
+                f"- Requester: {record.get('project_manager', '') or 'Not specified'}\\n"
+                f"- Email address: {requester_email}\\n"
+                f"- Analysis operator: {record.get('assigned_operator', '') or 'Not specified'}\\n\\n"
+                f"DOCUMENT(S) RECEIVED\\n\\n"
+                f"- {uploaded_summary_en}\\n"
+                f"- Date received: {datetime.fromisoformat(now).astimezone().strftime('%d/%m/%Y at %H:%M:%S')}\\n\\n"
+                f"The documents have been saved in Nextcloud and linked to this request reference.\\n\\n"
                 f"Please take this update into account."
             )
             send_email(ijpb_email, internal_subject, internal_body, cc=cc, reply_to=requester_email)
@@ -4377,29 +4398,27 @@ def render_purchase_order_import():
         # validated against the original request above.
         try:
             requester_subject = (
-                f"Confirmation de dépôt du bon de commande – {public_request_reference(record)}"
-                if fr else f"Purchase order upload confirmation – {public_request_reference(record)}"
+                f"Confirmation de dépôt de document(s) – {public_request_reference(record)}"
+                if fr else f"Document upload confirmation – {public_request_reference(record)}"
             )
             requester_body = (
-                f"Bonjour,\n\n"
-                f"Nous vous confirmons la réception de votre bon de commande pour la demande {public_request_reference(record)}.\n\n"
-                f"Projet : {record.get('project_name', '')}\n"
-                f"Référence complète de la demande : {public_request_reference(record)}\n"
-                f"Document reçu : {purchase_order_file.name}\n"
-                f"Date de réception : {now}\n"
-                f"Statut : Bon de commande reçu\n\n"
-                f"Votre document a été enregistré. Cette confirmation concerne uniquement la réception du bon de commande ; elle ne signifie pas que l'analyse a commencé.\n\n"
-                f"Cordialement,\nL’équipe OV-Chimie"
+                f"Bonjour,\\n\\n"
+                f"Nous vous confirmons la réception du/des document(s) suivant(s) pour la demande {public_request_reference(record)}.\\n\\n"
+                f"Projet : {record.get('project_name', '')}\\n"
+                f"Référence complète de la demande : {public_request_reference(record)}\\n"
+                f"Document(s) reçu(s) : {uploaded_summary_fr}\\n"
+                f"Date de réception : {now}\\n\\n"
+                f"Vos documents ont été enregistrés dans l'espace Nextcloud de la plateforme OV-Chimie.\\n\\n"
+                f"Cordialement,\\nL’équipe OV-Chimie"
                 if fr else
-                f"Hello,\n\n"
-                f"This email confirms that we have received your purchase order for request {public_request_reference(record)}.\n\n"
-                f"Project: {record.get('project_name', '')}\n"
-                f"Full request reference: {public_request_reference(record)}\n"
-                f"Document received: {purchase_order_file.name}\n"
-                f"Received on: {now}\n"
-                f"Status: Purchase order received\n\n"
-                f"Your document has been saved. This confirmation only acknowledges receipt of the purchase order; it does not mean that the analysis has started.\n\n"
-                f"Best regards,\nThe OV-Chimie team"
+                f"Hello,\\n\\n"
+                f"This email confirms receipt of the following document(s) for request {public_request_reference(record)}.\\n\\n"
+                f"Project: {record.get('project_name', '')}\\n"
+                f"Full request reference: {public_request_reference(record)}\\n"
+                f"Document(s) received: {uploaded_summary_en}\\n"
+                f"Received on: {now}\\n\\n"
+                f"Your documents have been saved in the OV-Chimie platform's Nextcloud space.\\n\\n"
+                f"Best regards,\\nThe OV-Chimie team"
             )
             send_email(requester_email, requester_subject, requester_body)
         except Exception as mail_exc:
@@ -4408,9 +4427,9 @@ def render_purchase_order_import():
             )
 
         st.success(
-            f"Le bon de commande de la demande {public_request_reference(record)} a été enregistré dans Nextcloud. Le résumé de la demande a été mis à jour."
+            f"Les documents ({uploaded_summary_fr}) de la demande {public_request_reference(record)} ont été enregistrés dans Nextcloud."
             if fr else
-            f"The purchase order for request {public_request_reference(record)} was saved to Nextcloud. The request summary has been updated."
+            f"The documents ({uploaded_summary_en}) for request {public_request_reference(record)} were saved to Nextcloud."
         )
         if notification_errors:
             st.warning(
@@ -4437,7 +4456,7 @@ else:
     _navigation_options = {
         ("Demande d'analyse" if _fr_navigation else "Analysis request"): "form",
         ("FAIR" if _fr_navigation else "FAIR"): "fair",
-        ("Importation de bon de commande" if _fr_navigation else "Purchase order upload"): "purchase_order",
+        ("Importation du devis signé / bon de commande" if _fr_navigation else "Signed quotation / purchase order upload"): "purchase_order",
         ("Administrateur" if _fr_navigation else "Administrator"): "admin",
         ("Contact" if _fr_navigation else "Contact"): "contact",
     }
