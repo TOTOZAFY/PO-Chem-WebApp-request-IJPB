@@ -2017,12 +2017,16 @@ def render_admin():
 
         st.subheader(t("analysis_type_stats"))
         analysis_counts = {}
+        analysis_chart_data = None
+        status_chart_data = None
+        monthly_chart_data = None
+        yearly_chart_data = None
         for item in active_records:
             analysis_type = item.get("analysis_type") or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
             display_type = analysis_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(analysis_type, ANALYSIS_TYPES_EN.get(analysis_type, analysis_type))
             analysis_counts[display_type] = analysis_counts.get(display_type, 0) + 1
         if analysis_counts:
-            st.bar_chart(dict(sorted(analysis_counts.items())))
+            analysis_chart_data = dict(sorted(analysis_counts.items()))
         else:
             st.caption(t("no_requests"))
 
@@ -2031,7 +2035,7 @@ def render_admin():
             "pending": t("status_pending"), "accepted": t("status_accepted"), "refused": t("status_refused")
         }
         counts = {status_labels[k]: statuses.count(k) for k in status_labels}
-        st.bar_chart(counts)
+        status_chart_data = counts
 
         st.subheader(t("by_month"))
         monthly = {}
@@ -2040,7 +2044,7 @@ def render_admin():
             if month:
                 monthly[month] = monthly.get(month, 0) + 1
         if monthly:
-            st.bar_chart(dict(sorted(monthly.items())))
+            monthly_chart_data = dict(sorted(monthly.items()))
         else:
             st.caption(t("no_requests"))
 
@@ -2051,7 +2055,7 @@ def render_admin():
             if year:
                 yearly[year] = yearly.get(year, 0) + 1
         if yearly:
-            st.bar_chart(dict(sorted(yearly.items())))
+            yearly_chart_data = dict(sorted(yearly.items()))
 
         import csv
         from io import StringIO
@@ -3322,6 +3326,7 @@ def render_admin():
             year_totals[revenue_category] += unit_price * sample_count * multiplier
         annual_request_counts[year] = annual_request_counts.get(year, 0) + 1
 
+    revenue_chart_data = None
     if annual_revenue:
         import pandas as pd
         year_col = "Année" if is_fr else "Year"
@@ -3335,7 +3340,7 @@ def render_admin():
             }
             for year, amounts in sorted(annual_revenue.items())
         ])
-        st.bar_chart(revenue_frame.set_index(year_col)[list(category_cols.values())])
+        revenue_chart_data = revenue_frame.set_index(year_col)[list(category_cols.values())]
         st.dataframe(revenue_frame, use_container_width=True, hide_index=True)
         category_totals = {
             category: sum(amounts[category] for amounts in annual_revenue.values())
@@ -3404,6 +3409,7 @@ def render_admin():
         yearly_totals[category] += amount
         invoice_counts[invoice_year] = invoice_counts.get(invoice_year, 0) + 1
 
+    invoice_chart_data = None
     if annual_invoices:
         import pandas as pd
         invoice_year_col = "Année" if is_fr else "Year"
@@ -3417,7 +3423,7 @@ def render_admin():
             }
             for year, amounts in sorted(annual_invoices.items())
         ])
-        st.bar_chart(invoice_frame.set_index(invoice_year_col)[list(invoice_category_cols.values())])
+        invoice_chart_data = invoice_frame.set_index(invoice_year_col)[list(invoice_category_cols.values())]
         st.dataframe(invoice_frame, use_container_width=True, hide_index=True)
         invoice_category_totals = {
             category: sum(amounts[category] for amounts in annual_invoices.values())
@@ -3448,6 +3454,28 @@ def render_admin():
             if is_fr else
             f"{missing_invoice_date_count} invoice(s) excluded because no year could be identified."
         )
+
+
+    # All statistical charts are grouped at the bottom, after cumulative invoicing.
+    st.subheader("Graphiques statistiques" if is_fr else "Statistical charts")
+    if analysis_chart_data:
+        st.markdown("**Demandes par type d’analyse**" if is_fr else "**Requests by analysis type**")
+        st.bar_chart(analysis_chart_data)
+    if status_chart_data:
+        st.markdown("**Répartition par statut**" if is_fr else "**Distribution by status**")
+        st.bar_chart(status_chart_data)
+    if monthly_chart_data:
+        st.markdown("**Demandes par mois**" if is_fr else "**Requests by month**")
+        st.bar_chart(monthly_chart_data)
+    if yearly_chart_data:
+        st.markdown("**Demandes par année**" if is_fr else "**Requests by year**")
+        st.bar_chart(yearly_chart_data)
+    if revenue_chart_data is not None:
+        st.markdown("**Recettes annuelles indicatives**" if is_fr else "**Indicative annual revenue**")
+        st.bar_chart(revenue_chart_data)
+    if invoice_chart_data is not None:
+        st.markdown("**Montants cumulés mis en facturation**" if is_fr else "**Cumulative amounts invoiced**")
+        st.bar_chart(invoice_chart_data)
 
 
 def render_form():
