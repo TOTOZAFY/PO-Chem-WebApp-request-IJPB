@@ -821,6 +821,11 @@ def request_display_label(record, include_date=True):
     return label
 
 
+def public_request_reference(record):
+    """Return the full public reference; keep record['id'] as the internal key."""
+    return request_display_label(record, include_date=False)
+
+
 def build_document(form_data):
     doc = Document(TEMPLATE_PATH)
     if len(doc.tables) < 2:
@@ -1708,11 +1713,14 @@ def render_fair_pipeline_access():
     role = st.selectbox("Qui souhaite compléter Pipeline Step by Step ?" if fr else "Who is completing Pipeline Step by Step?", ["Demandeur", "Administrateur"] if fr else ["Requester", "Administrator"], key="fair_pipeline_role")
     if role in (["Demandeur"] if fr else ["Requester"]):
         with st.form("fair_pipeline_requester_access_form"):
-            reference = st.text_input("Référence de la demande" if fr else "Request reference")
+            reference = st.text_input(
+                "Référence complète de la demande" if fr else "Full request reference",
+                placeholder="REQ-… — DEMANDEUR — PROJET — LABORATOIRE",
+            )
             email = st.text_input("Adresse e-mail du demandeur" if fr else "Requester email address")
             submitted = st.form_submit_button("Accéder à Pipeline Step by Step" if fr else "Open Pipeline Step by Step")
         if submitted:
-            record = next((r for r in active_records if str(r.get("id", "")).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
+            record = next((r for r in active_records if request_display_label(r, include_date=False).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
             if not record:
                 st.error("Référence ou adresse e-mail incorrecte." if fr else "Reference or email address is incorrect.")
                 return
@@ -1745,11 +1753,14 @@ def render_fair_data_treatment_access():
     )
     if role == ("Demandeur" if fr else "Requester"):
         with st.form("fair_data_treatment_requester_access_form"):
-            reference = st.text_input("Référence de la demande" if fr else "Request reference")
+            reference = st.text_input(
+                "Référence complète de la demande" if fr else "Full request reference",
+                placeholder="REQ-… — DEMANDEUR — PROJET — LABORATOIRE",
+            )
             email = st.text_input("Adresse e-mail du demandeur" if fr else "Requester email address")
             submitted = st.form_submit_button("Accéder à Data treatment" if fr else "Open Data treatment")
         if submitted:
-            record = next((r for r in active_records if str(r.get("id", "")).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
+            record = next((r for r in active_records if request_display_label(r, include_date=False).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
             if not record:
                 st.error("Référence ou adresse e-mail incorrecte." if fr else "Request reference or email address is incorrect.")
                 return
@@ -1798,11 +1809,14 @@ def render_fair_portal():
         requester_role = "Demandeur" if fr else "Requester"
         if role == requester_role:
             with st.form("fair_analysis_requester_access_form"):
-                reference = st.text_input("Référence de la demande" if fr else "Request reference")
+                reference = st.text_input(
+                "Référence complète de la demande" if fr else "Full request reference",
+                placeholder="REQ-… — DEMANDEUR — PROJET — LABORATOIRE",
+            )
                 email = st.text_input("Adresse e-mail du demandeur" if fr else "Requester email address")
                 submitted = st.form_submit_button("Accéder à Analysis" if fr else "Open Analysis")
             if submitted:
-                record = next((r for r in active_records if str(r.get("id", "")).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
+                record = next((r for r in active_records if request_display_label(r, include_date=False).strip().casefold() == reference.strip().casefold() and str(r.get("manager_email", "")).strip().casefold() == email.strip().casefold()), None)
                 if not record:
                     st.error("Référence ou adresse e-mail incorrecte." if fr else "Request reference or email address is incorrect.")
                     return
@@ -1852,18 +1866,21 @@ def render_fair_portal():
     requester_role = "Demandeur" if fr else "Requester"
     if role == requester_role:
         st.write(
-            "Saisissez la référence de votre demande et l'adresse e-mail utilisée lors de sa création. Vous accéderez uniquement aux champs à compléter par le demandeur."
+            "Saisissez la référence complète de votre demande (identifiant — demandeur — projet — laboratoire) et l'adresse e-mail utilisée lors de sa création. Vous accéderez uniquement aux champs à compléter par le demandeur."
             if fr else
-            "Enter your request reference and the email address used when submitting it. You will only access fields assigned to the requester."
+            "Enter your full request reference (ID — requester — project — laboratory) and the email address used when submitting it. You will only access fields assigned to the requester."
         )
         with st.form("fair_sample_requester_access_form"):
-            reference = st.text_input("Référence de la demande" if fr else "Request reference")
+            reference = st.text_input(
+                "Référence complète de la demande" if fr else "Full request reference",
+                placeholder="REQ-… — DEMANDEUR — PROJET — LABORATOIRE",
+            )
             email = st.text_input("Adresse e-mail du demandeur" if fr else "Requester email address")
             submitted = st.form_submit_button("Accéder à Sample" if fr else "Open Sample")
         if submitted:
             norm_ref, norm_email = reference.strip().casefold(), email.strip().casefold()
             record = next((r for r in active_records
-                           if str(r.get("id", "")).strip().casefold() == norm_ref
+                           if request_display_label(r, include_date=False).strip().casefold() == norm_ref
                            and str(r.get("manager_email", "")).strip().casefold() == norm_email), None)
             if not record:
                 st.error("Référence ou adresse e-mail incorrecte. Vérifiez les informations indiquées." if fr else "Reference or email address not recognized. Please check your details.")
@@ -2778,7 +2795,7 @@ def render_admin():
                                     body = (
                                         "Bonjour " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
                                         "Merci de compléter les métadonnées FAIR de votre demande.\n"
-                                        "Référence de votre demande : " + str(record.get("id", "")) + "\n"
+                                        "Référence de votre demande : " + public_request_reference(record) + "\n"
                                         "Vous pouvez ouvrir l'application, choisir le menu FAIR, puis saisir cette référence et votre adresse e-mail de demandeur.\n\n"
                                         "Accès direct sécurisé :\n" + link
                                     )
@@ -2786,7 +2803,7 @@ def render_admin():
                                     body = (
                                         "Hello " + (record.get("project_manager_first_name") or record.get("project_manager", "")) + ",\n\n"
                                         "Please complete the FAIR metadata for your request.\n"
-                                        "Your request reference: " + str(record.get("id", "")) + "\n"
+                                        "Your request reference: " + public_request_reference(record) + "\n"
                                         "Open the application, select the FAIR menu, then enter this reference and your requester email address.\n\n"
                                         "Secure direct access: \n" + link
                                     )
@@ -3080,7 +3097,7 @@ def render_admin():
                                     body = (
                                         f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
                                         f"Votre demande d'analyse a été acceptée.\n\n"
-                                        f"Référence de la demande : {record.get('id', '')} | "
+                                        f"Référence complète de la demande : {public_request_reference(record)} | "
                                         f"Nombre d'échantillons : {sample_count}\n"
                                         f"Analyses demandées :\n{analysis_details_fr} | "
                                         f"Type de laboratoire : {visibility} | "
@@ -3095,7 +3112,7 @@ def render_admin():
                                     body = (
                                         f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
                                         "Your analysis request has been accepted.\n\n"
-                                        f"Request reference: {record.get('id', '')} | "
+                                        f"Full request reference: {public_request_reference(record)} | "
                                         f"Number of samples: {sample_count}\n"
                                         f"Requested analyses:\n{analysis_details_en} | "
                                         f"Laboratory type: {visibility} | "
@@ -3114,9 +3131,9 @@ def render_admin():
                                     comment=comment.strip() or ("Aucun commentaire." if st.session_state.language == "fr" else "No comment."),
                                 )
                             mail_subject = (
-                                f"Demande d'analyse acceptée – Réf. {record.get('id', '')}"
+                                f"Demande d'analyse acceptée – Réf. {public_request_reference(record)}"
                                 if new_status == "accepted" and st.session_state.language == "fr"
-                                else f"Analysis request accepted – Ref. {record.get('id', '')}"
+                                else f"Analysis request accepted – Ref. {public_request_reference(record)}"
                                 if new_status == "accepted"
                                 else t("mail_user_subject")
                             )
@@ -3756,7 +3773,8 @@ def render_form():
                             send_email(
                                 admin_email,
                                 t("mail_admin_subject"),
-                                t("mail_admin_body").format(
+                                (
+                                    t("mail_admin_body").format(
                                     project=record["project_name"],
                                     manager=" ".join(
                                         part for part in (
@@ -3768,6 +3786,9 @@ def render_form():
                                     analysis_type=" ; ".join(x.get("analysis_type", "") for x in record.get("analysis_items", [])) or record.get("analysis_type", ""),
                                     analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
                                     path=remote_file,
+                                    )
+                                    + ("\\nRéférence complète : " if st.session_state.language == "fr" else "\\nFull request reference: ")
+                                    + public_request_reference(record)
                                 ),
                                 cc=platform_staff_cc,
                                 reply_to=record.get("manager_email", "").strip() or None,
@@ -4069,9 +4090,9 @@ def render_purchase_order_import():
     fr = st.session_state.get("language", "fr") == "fr"
     st.title("Importation de bon de commande" if fr else "Purchase order upload")
     st.write(
-        "Renseignez l’adresse e-mail utilisée lors de la demande et sa référence, puis importez le bon de commande."
+        "Renseignez l’adresse e-mail utilisée lors de la demande et la référence complète (identifiant — demandeur — projet — laboratoire), puis importez le bon de commande."
         if fr else
-        "Enter the email address used for the request and its reference, then upload the purchase order."
+        "Enter the email address used for the request and the full reference (ID — requester — project — laboratory), then upload the purchase order."
     )
     requester_email = st.text_input(
         "Adresse e-mail du demandeur *" if fr else "Requester email address *",
@@ -4080,7 +4101,7 @@ def render_purchase_order_import():
     ).strip()
     request_reference = st.text_input(
         "Référence de la demande *" if fr else "Request reference *",
-        placeholder="Ex. PO-CHEM-2026-001",
+        placeholder="Ex. REQ-... — NOM — PROJET — LABORATOIRE",
         key="requester_purchase_order_reference",
     ).strip()
 
@@ -4092,7 +4113,7 @@ def render_purchase_order_import():
             validation_records = load_metadata()
             matching_record = next(
                 (r for r in validation_records
-                 if str(r.get("id", "")).strip().casefold() == request_reference.casefold()
+                 if request_display_label(r, include_date=False).strip().casefold() == request_reference.strip().casefold()
                  and str(r.get("manager_email", "")).strip().casefold() == requester_email.casefold()
                  and not r.get("deleted", False)),
                 None,
@@ -4117,9 +4138,9 @@ def render_purchase_order_import():
         st.warning("L’adresse e-mail n’est pas valide." if fr else "The email address is not valid.")
     elif reference_is_valid:
         st.success(
-            f"Demande {matching_record.get('id')} reconnue. Vous pouvez importer le bon de commande."
+            f"Demande {public_request_reference(matching_record)} reconnue. Vous pouvez importer le bon de commande."
             if fr else
-            f"Request {matching_record.get('id')} verified. You can upload the purchase order."
+            f"Request {public_request_reference(matching_record)} verified. You can upload the purchase order."
         )
     else:
         st.error(
@@ -4154,7 +4175,7 @@ def render_purchase_order_import():
     try:
         records = load_metadata()
         record = next((r for r in records
-                       if str(r.get("id", "")).strip().casefold() == request_reference.casefold()
+                       if request_display_label(r, include_date=False).strip().casefold() == request_reference.strip().casefold()
                        and str(r.get("manager_email", "")).strip().casefold() == requester_email.casefold()
                        and not r.get("deleted", False)), None)
         if record is None:
@@ -4196,17 +4217,17 @@ def render_purchase_order_import():
             operator_email = str(record.get("assigned_operator_email", "")).strip()
             cc = join_email_recipients(DEFAULT_ADMIN_EMAIL, operator_email)
             internal_subject = (
-                f"Bon de commande reçu – demande {record['id']}"
-                if fr else f"Purchase order received – request {record['id']}"
+                f"Bon de commande reçu – {public_request_reference(record)}"
+                if fr else f"Purchase order received – {public_request_reference(record)}"
             )
             internal_body = (
-                f"Un bon de commande a été importé pour la demande {record['id']}.\n"
+                f"Un bon de commande a été importé pour la demande {public_request_reference(record)}.\n"
                 f"Projet : {record.get('project_name', '')}\n"
                 f"Demandeur : {record.get('project_manager', '')} ({requester_email})\n"
                 f"Opérateur : {record.get('assigned_operator', '') or 'Non renseigné'}\n"
                 f"Fichier Nextcloud : {new_path}\nStatut du bon de commande : reçu"
                 if fr else
-                f"A purchase order was uploaded for request {record['id']}.\n"
+                f"A purchase order was uploaded for request {public_request_reference(record)}.\n"
                 f"Project: {record.get('project_name', '')}\nRequester: {record.get('project_manager', '')} ({requester_email})\n"
                 f"Operator: {record.get('assigned_operator', '') or 'Not specified'}\n"
                 f"Nextcloud file: {new_path}\nPurchase order status: received"
@@ -4221,14 +4242,14 @@ def render_purchase_order_import():
         # validated against the original request above.
         try:
             requester_subject = (
-                f"Confirmation de dépôt du bon de commande – demande {record['id']}"
-                if fr else f"Purchase order upload confirmation – request {record['id']}"
+                f"Confirmation de dépôt du bon de commande – {public_request_reference(record)}"
+                if fr else f"Purchase order upload confirmation – {public_request_reference(record)}"
             )
             requester_body = (
                 f"Bonjour,\n\n"
-                f"Nous vous confirmons la réception de votre bon de commande pour la demande {record['id']}.\n\n"
+                f"Nous vous confirmons la réception de votre bon de commande pour la demande {public_request_reference(record)}.\n\n"
                 f"Projet : {record.get('project_name', '')}\n"
-                f"Référence de la demande : {record['id']}\n"
+                f"Référence complète de la demande : {public_request_reference(record)}\n"
                 f"Document reçu : {purchase_order_file.name}\n"
                 f"Date de réception : {now}\n"
                 f"Statut : Bon de commande reçu\n\n"
@@ -4236,9 +4257,9 @@ def render_purchase_order_import():
                 f"Cordialement,\nL’équipe OV-Chimie"
                 if fr else
                 f"Hello,\n\n"
-                f"This email confirms that we have received your purchase order for request {record['id']}.\n\n"
+                f"This email confirms that we have received your purchase order for request {public_request_reference(record)}.\n\n"
                 f"Project: {record.get('project_name', '')}\n"
-                f"Request reference: {record['id']}\n"
+                f"Full request reference: {public_request_reference(record)}\n"
                 f"Document received: {purchase_order_file.name}\n"
                 f"Received on: {now}\n"
                 f"Status: Purchase order received\n\n"
@@ -4252,9 +4273,9 @@ def render_purchase_order_import():
             )
 
         st.success(
-            f"Le bon de commande de la demande {record['id']} a été enregistré dans Nextcloud. Le résumé de la demande a été mis à jour."
+            f"Le bon de commande de la demande {public_request_reference(record)} a été enregistré dans Nextcloud. Le résumé de la demande a été mis à jour."
             if fr else
-            f"The purchase order for request {record['id']} was saved to Nextcloud. The request summary has been updated."
+            f"The purchase order for request {public_request_reference(record)} was saved to Nextcloud. The request summary has been updated."
         )
         if notification_errors:
             st.warning(
