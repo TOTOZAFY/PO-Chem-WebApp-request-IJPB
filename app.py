@@ -123,7 +123,7 @@ TRANSLATIONS = {
         "visibility_private": "Privée",
         "visibility_public": "Publique",
         "visibility_ijpb": "Publique (IJPB)",
-        "group": "Groupe / laboratoire *", "date": "Date", "phone": "Téléphone",
+        "group": "Groupe / laboratoire *", "group_address": "Adresse du laboratoire ou du groupe *", "date": "Date", "phone": "Téléphone",
         "manager_email": "E-mail du responsable *", "admin_staff": "Personnel administratif",
         "admin_phone": "Téléphone du personnel administratif", "admin_email": "E-mail du personnel administratif (facultatif)",
         "recommended": "* Champ obligatoire.", "description": "2. Description du projet",
@@ -243,7 +243,7 @@ TRANSLATIONS = {
         "visibility_private": "Private",
         "visibility_public": "Public",
         "visibility_ijpb": "Public (IJPB)",
-        "group": "Group / laboratory *", "date": "Date", "phone": "Telephone",
+        "group": "Group / laboratory *", "group_address": "Laboratory or group address *", "date": "Date", "phone": "Telephone",
         "manager_email": "Project manager email *", "admin_staff": "Administrative staff",
         "admin_phone": "Administrative staff telephone", "admin_email": "Administrative staff email (optional)",
         "recommended": "* Required field.", "description": "2. Project description",
@@ -839,6 +839,13 @@ def build_document(form_data):
     first_p.add_run(f"{first_label} : ").bold = True
     first_p.add_run(manager_first)
     add_to_existing_paragraph(table.cell(0, 2).paragraphs[0], form_data.get("group"))
+    group_address = str(form_data.get("group_address", "") or "").strip()
+    if group_address:
+        group_address_paragraph = table.cell(0, 2).add_paragraph()
+        group_address_paragraph.add_run(
+            ("Adresse : " if st.session_state.get("language", "fr") == "fr" else "Address: ")
+        ).bold = True
+        group_address_paragraph.add_run(group_address)
     add_to_existing_paragraph(table.cell(1, 0).paragraphs[0], form_data.get("date"))
     add_to_existing_paragraph(table.cell(1, 1).paragraphs[0], form_data.get("manager_phone"))
     add_to_existing_paragraph(table.cell(1, 3).paragraphs[0], form_data.get("manager_email"))
@@ -2477,7 +2484,7 @@ def render_admin():
         import csv
         from io import StringIO
         csv_buffer = StringIO()
-        fields = ["id", "project_name", "project_manager", "manager_email", "group",
+        fields = ["id", "project_name", "project_manager", "manager_email", "group", "group_address",
                   "request_date", "submitted_at", "status", "admin_comment", "document_path", "quote_signed", "signed_quote_path", "analysis_type", "analysis_mode", "analysis_details"]
         writer = csv.DictWriter(csv_buffer, fieldnames=fields, extrasaction="ignore")
         writer.writeheader()
@@ -2546,6 +2553,7 @@ def render_admin():
                 else:
                     st.write(f"**{t('manager_email')} :** —")
                 st.write(f"**{t('group')} :** {record.get('group','')}")
+                st.write(f"**{t('group_address')} :** {record.get('group_address','')}")
                 st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
     
                 # Operator assigned to perform the analyses for this request.
@@ -3316,6 +3324,7 @@ def render_form():
                 text_field("project_manager", t("manager_last_name"))
                 text_field("project_manager_first_name", t("manager_first_name"))
                 text_field("group", t("group"))
+                text_field("group_address", t("group_address"))
                 selected_date = st.date_input(t("date"), value=date.fromisoformat(data["date"]) if data.get("date") else date.today())
                 data["date"] = selected_date.isoformat()
                 text_field("manager_phone", t("phone"))
@@ -3450,6 +3459,7 @@ def render_form():
                 (t("visibility"), data.get("visibility", "Public (IJPB)")),
                 (t("sample_count"), str(data.get("sample_count", ""))),
                 (t("group"), data.get("group", "")),
+                (t("group_address"), data.get("group_address", "")),
                 (t("date"), data.get("date", "")),
                 (t("manager_email"), data.get("manager_email", "")),
                 (t("analysis_type"), " ; ".join(f"{x.get('analysis_type', '')} — {x.get('sample_count', 1)}" for x in data.get("analysis_items", []))),
@@ -3513,6 +3523,7 @@ def render_form():
                     "project_manager_first_name": t("manager_first_name"),
                     "visibility": t("visibility"),
                     "group": t("project_group_short"),
+                    "group_address": t("group_address"),
                     "date": t("project_date_short"),
                     "manager_phone": t("phone"),
                     "manager_email": t("project_manager_email_short"),
@@ -3539,6 +3550,7 @@ def render_form():
                 data.get("project_manager_first_name", "").strip(),
                 data.get("manager_email", "").strip(),
                 data.get("group", "").strip(),
+                data.get("group_address", "").strip(),
                 data.get("project_name", "").strip(),
                 data.get("analysis_type", "").strip(),
             ]
@@ -3702,6 +3714,7 @@ def render_form():
                             "sample_count": int(data.get("sample_count", 1) or 1),
                             "analysis_items": [{**x, "sample_count": int(x.get("sample_count", 1) or 1)} for x in data.get("analysis_items", [])],
                             "group": data.get("group", ""),
+                            "group_address": data.get("group_address", "").strip(),
                             "request_date": data.get("date", ""),
                             "submitted_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                             "status": "pending",
