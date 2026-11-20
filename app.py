@@ -2375,22 +2375,22 @@ def render_admin():
         )
 
     # Confirmed purchase-order amounts: include every non-deleted request
-    # with a validated uploaded purchase order, whether active or archived,
-    # and regardless of its request status.
-    st.subheader("Montants cumulés des bons de commande" if is_fr else "Cumulative purchase order amounts")
+    # Cumulative invoiced amounts are based on invoices uploaded by the administrator
+    # and the actual amount entered from each invoice.
+    st.subheader("Montants cumulés mis en facturation" if is_fr else "Cumulative amounts invoiced")
     st.caption(
-        "Cumul de tous les bons de commande importés et validés, demandes actives et archivées, quel que soit leur statut. Le montant correspond au bon de commande et non nécessairement à un paiement encaissé."
+        "Cumul des montants réellement facturés, saisis à partir des factures importées, pour les demandes actives et archivées."
         if is_fr else
-        "Total of all uploaded and validated purchase orders, across active and archived requests and regardless of status. These are purchase-order amounts, not necessarily payments received."
+        "Total of actual invoiced amounts entered from uploaded invoices, across active and archived requests."
     )
-    annual_purchase_orders = {}
-    purchase_order_counts = {}
-    missing_purchase_order_date_count = 0
+    annual_invoices = {}
+    invoice_counts = {}
+    missing_invoice_date_count = 0
     for item in records:
         if item.get("deleted", False):
             continue
-        raw_amount = item.get("purchase_order_amount")
-        if raw_amount in (None, "") or not item.get("purchase_order_path"):
+        raw_amount = item.get("invoice_amount")
+        if raw_amount in (None, "") or not item.get("invoice_path"):
             continue
         try:
             amount = float(str(raw_amount).replace(" ", "").replace(",", "."))
@@ -2398,66 +2398,66 @@ def render_admin():
             continue
         if amount <= 0:
             continue
-        po_date = str(item.get("purchase_order_updated_at", "") or item.get("decision_at", "") or item.get("submitted_at", ""))
-        po_year = po_date[:4]
-        if not po_year.isdigit():
-            missing_purchase_order_date_count += 1
+        invoice_date = str(item.get("invoice_updated_at", "") or "")
+        invoice_year = invoice_date[:4]
+        if not invoice_year.isdigit():
+            missing_invoice_date_count += 1
             continue
-        po_lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
-        po_lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(po_lab_type, po_lab_type)
-        po_category = po_lab_type
-        if po_lab_type == "Public (IJPB)":
-            po_funding = str(item.get("funding", "NO") or "NO").strip().upper()
-            po_category = "Public (IJPB) - funded" if po_funding in ("YES", "OUI", "TRUE", "1") else "Public (IJPB) - not funded"
-        if po_category not in revenue_categories:
-            po_category = "Public"
-        po_totals = annual_purchase_orders.setdefault(po_year, {category: 0.0 for category in revenue_categories})
-        po_totals[po_category] += amount
-        purchase_order_counts[po_year] = purchase_order_counts.get(po_year, 0) + 1
+        lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
+        lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(lab_type, lab_type)
+        category = lab_type
+        if lab_type == "Public (IJPB)":
+            funding = str(item.get("funding", "NO") or "NO").strip().upper()
+            category = "Public (IJPB) - funded" if funding in ("YES", "OUI", "TRUE", "1") else "Public (IJPB) - not funded"
+        if category not in revenue_categories:
+            category = "Public"
+        yearly_totals = annual_invoices.setdefault(invoice_year, {item_category: 0.0 for item_category in revenue_categories})
+        yearly_totals[category] += amount
+        invoice_counts[invoice_year] = invoice_counts.get(invoice_year, 0) + 1
 
-    if annual_purchase_orders:
+    if annual_invoices:
         import pandas as pd
-        po_year_col = "Année" if is_fr else "Year"
-        po_total_col = "Total bons de commande (€)" if is_fr else "Total purchase orders (€)"
-        po_category_cols = {category: f"{revenue_labels[category]} (€)" for category in revenue_categories}
-        po_frame = pd.DataFrame([
+        invoice_year_col = "Année" if is_fr else "Year"
+        invoice_total_col = "Total mis en facturation (€)" if is_fr else "Total invoiced (€)"
+        invoice_category_cols = {category: f"{revenue_labels[category]} (€)" for category in revenue_categories}
+        invoice_frame = pd.DataFrame([
             {
-                po_year_col: year,
-                **{po_category_cols[category]: round(amounts[category], 2) for category in revenue_categories},
-                po_total_col: round(sum(amounts.values()), 2),
+                invoice_year_col: year,
+                **{invoice_category_cols[category]: round(amounts[category], 2) for category in revenue_categories},
+                invoice_total_col: round(sum(amounts.values()), 2),
             }
-            for year, amounts in sorted(annual_purchase_orders.items())
+            for year, amounts in sorted(annual_invoices.items())
         ])
-        st.bar_chart(po_frame.set_index(po_year_col)[list(po_category_cols.values())])
-        st.dataframe(po_frame, use_container_width=True, hide_index=True)
-        po_category_totals = {
-            category: sum(amounts[category] for amounts in annual_purchase_orders.values())
+        st.bar_chart(invoice_frame.set_index(invoice_year_col)[list(invoice_category_cols.values())])
+        st.dataframe(invoice_frame, use_container_width=True, hide_index=True)
+        invoice_category_totals = {
+            category: sum(amounts[category] for amounts in annual_invoices.values())
             for category in revenue_categories
         }
-        po_metrics = st.columns(4)
-        for column, category in zip(po_metrics, revenue_categories):
+        invoice_metrics = st.columns(4)
+        for column, category in zip(invoice_metrics, revenue_categories):
             column.metric(
                 revenue_labels[category],
-                f"{po_category_totals[category]:,.2f} €".replace(",", " "),
+                f"{invoice_category_totals[category]:,.2f} €".replace(",", " "),
             )
-        po_total = sum(po_category_totals.values())
+        invoice_total = sum(invoice_category_totals.values())
         st.metric(
-            "Total cumulé des bons de commande" if is_fr else "Cumulative purchase order total",
-            f"{po_total:,.2f} €".replace(",", " "),
+            "Total cumulé mis en facturation" if is_fr else "Cumulative invoiced total",
+            f"{invoice_total:,.2f} €".replace(",", " "),
         )
-        po_count_label = "Bons de commande comptabilisés" if is_fr else "Purchase orders included"
-        st.caption(f"{po_count_label} : {sum(purchase_order_counts.values())}")
+        invoice_count_label = "Factures comptabilisées" if is_fr else "Invoices included"
+        st.caption(f"{invoice_count_label} : {sum(invoice_counts.values())}")
     else:
         st.info(
-            "Aucun bon de commande importé avec un montant validé et une année identifiable."
+            "Aucune facture importée avec un montant réel facturé et une année identifiable."
             if is_fr else
-            "No uploaded purchase orders with a validated amount and identifiable year."
+            "No uploaded invoices with an actual invoiced amount and identifiable year."
         )
-    if missing_purchase_order_date_count:
+    if missing_invoice_date_count:
         st.warning(
-            f"{missing_purchase_order_date_count} bon(s) de commande exclu(s) car aucune année d'importation identifiable."
+            f"{missing_invoice_date_count} facture(s) exclue(s) car aucune année identifiable."
             if is_fr else
-            f"{missing_purchase_order_date_count} purchase order(s) excluded because no upload year could be identified."
+            f"{missing_invoice_date_count} invoice(s) excluded because no year could be identified."
         )
 
     active_tab, archive_tab = st.tabs([
@@ -2967,96 +2967,99 @@ def render_admin():
                         else "Signed quotation has not yet been received from the requester."
                     )
 
-                # Purchase order: upload first, then require manual amount validation in a popup.
-                purchase_order_label = "Bon de commande" if st.session_state.language == "fr" else "Purchase order"
-                purchase_order_upload_label = "Importer le bon de commande (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload purchase order (PDF, DOC or DOCX)"
-                purchase_order_save_label = "Valider l’import du bon de commande" if st.session_state.language == "fr" else "Validate purchase order upload"
-                existing_purchase_order_path = record.get("purchase_order_path", "")
-                with st.form(f"purchase_order_form_{selected_id}"):
-                    purchase_order_file = st.file_uploader(
-                        purchase_order_upload_label,
+                # Invoice: upload the issued invoice and enter the actual invoiced amount.
+                invoice_upload_label = "Importer la facture (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload invoice (PDF, DOC or DOCX)"
+                invoice_save_label = "Enregistrer la facture et le montant facturé" if st.session_state.language == "fr" else "Save invoice and invoiced amount"
+                existing_invoice_path = record.get("invoice_path", "")
+                with st.form(f"invoice_form_{selected_id}"):
+                    invoice_file = st.file_uploader(
+                        invoice_upload_label,
                         type=["pdf", "doc", "docx"],
-                        key=f"purchase_order_upload_{selected_id}",
+                        key=f"invoice_upload_{selected_id}",
                     )
-                    if existing_purchase_order_path:
-                        st.caption(("Bon de commande déjà déposé : " if st.session_state.language == "fr" else "Purchase order already uploaded: ") + existing_purchase_order_path)
-                        if record.get("purchase_order_amount") is not None:
+                    if existing_invoice_path:
+                        st.caption(
+                            ("Facture déjà déposée : " if st.session_state.language == "fr" else "Invoice already uploaded: ")
+                            + existing_invoice_path
+                        )
+                        if record.get("invoice_amount") is not None:
                             st.caption(
-                                (f"Montant enregistré : {float(record['purchase_order_amount']):.2f} €" if st.session_state.language == "fr"
-                                 else f"Recorded amount: €{float(record['purchase_order_amount']):.2f}")
+                                (f"Montant réel facturé enregistré : {float(record['invoice_amount']):.2f} €" if st.session_state.language == "fr"
+                                 else f"Actual invoiced amount recorded: €{float(record['invoice_amount']):.2f}")
                             )
-                    save_purchase_order = st.form_submit_button(purchase_order_save_label)
-                if save_purchase_order:
-                    if purchase_order_file is None:
-                        st.warning("Sélectionne un fichier avant de continuer." if st.session_state.language == "fr" else "Select a file before continuing.")
+                    save_invoice = st.form_submit_button(invoice_save_label)
+                if save_invoice:
+                    if invoice_file is None:
+                        st.warning("Sélectionne une facture avant de continuer." if st.session_state.language == "fr" else "Select an invoice before continuing.")
                     else:
-                        st.session_state[f"pending_purchase_order_{selected_id}"] = {
-                            "filename": purchase_order_file.name,
-                            "content": purchase_order_file.getvalue(),
+                        st.session_state[f"pending_invoice_{selected_id}"] = {
+                            "filename": invoice_file.name,
+                            "content": invoice_file.getvalue(),
                         }
-                        st.session_state[f"show_purchase_order_amount_dialog_{selected_id}"] = True
+                        st.session_state[f"show_invoice_amount_dialog_{selected_id}"] = True
                         st.rerun()
 
-                if st.session_state.get(f"show_purchase_order_amount_dialog_{selected_id}", False):
-                    @st.dialog("Validation du bon de commande" if st.session_state.language == "fr" else "Purchase order validation")
-                    def purchase_order_amount_dialog():
+                if st.session_state.get(f"show_invoice_amount_dialog_{selected_id}", False):
+                    @st.dialog("Enregistrement de la facture" if st.session_state.language == "fr" else "Invoice registration")
+                    def invoice_amount_dialog():
                         st.write(
-                            "Vérifie le montant total exact indiqué sur le bon de commande avant de valider son import."
+                            "Saisis le montant réellement facturé indiqué sur la facture. Ce montant alimentera le tableau des montants cumulés mis en facturation."
                             if st.session_state.language == "fr"
-                            else "Check the exact total amount shown on the purchase order before validating the upload."
+                            else "Enter the actual invoiced amount shown on the invoice. This amount will feed the cumulative invoiced amounts dashboard."
                         )
-                        amount_label = "Montant total exact du bon de commande (€)" if st.session_state.language == "fr" else "Exact purchase order total (€)"
-                        purchase_order_amount = st.number_input(
+                        amount_label = "Montant réel facturé (€)" if st.session_state.language == "fr" else "Actual invoiced amount (€)"
+                        invoice_amount = st.number_input(
                             amount_label,
                             min_value=0.0,
-                            value=float(record.get("purchase_order_amount") or 0.0),
+                            value=float(record.get("invoice_amount") or 0.0),
                             step=0.01,
                             format="%.2f",
-                            key=f"purchase_order_amount_input_{selected_id}",
+                            key=f"invoice_amount_input_{selected_id}",
                         )
                         confirm_col, cancel_col = st.columns(2)
                         with confirm_col:
-                            confirm_purchase_order = st.button(
+                            confirm_invoice = st.button(
                                 "Confirmer et enregistrer" if st.session_state.language == "fr" else "Confirm and save",
-                                key=f"confirm_purchase_order_{selected_id}",
+                                key=f"confirm_invoice_{selected_id}",
                                 type="primary",
                             )
                         with cancel_col:
-                            cancel_purchase_order = st.button(
+                            cancel_invoice = st.button(
                                 "Annuler" if st.session_state.language == "fr" else "Cancel",
-                                key=f"cancel_purchase_order_{selected_id}",
+                                key=f"cancel_invoice_{selected_id}",
                             )
-                        if confirm_purchase_order:
-                            if purchase_order_amount <= 0:
+                        if confirm_invoice:
+                            if invoice_amount <= 0:
                                 st.error("Saisis un montant supérieur à zéro." if st.session_state.language == "fr" else "Enter an amount greater than zero.")
                             else:
                                 try:
-                                    pending_upload = st.session_state.get(f"pending_purchase_order_{selected_id}", {})
-                                    if not pending_upload.get("content"):
-                                        raise ValueError("Le fichier du bon de commande n'est plus disponible. Merci de le sélectionner à nouveau.")
+                                    pending_invoice = st.session_state.get(f"pending_invoice_{selected_id}", {})
+                                    if not pending_invoice.get("content"):
+                                        raise ValueError("Le fichier de la facture n'est plus disponible. Merci de le sélectionner à nouveau.")
                                     ensure_remote_folder("OV-Chimie")
-                                    ensure_remote_folder("OV-Chimie/Bons_Commande")
-                                    safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(pending_upload["filename"])).strip("-") or "bon-commande"
-                                    new_purchase_order_path = f"OV-Chimie/Bons_Commande/{selected_id}_{safe_original}"
-                                    upload_response = webdav_request("PUT", new_purchase_order_path, data=pending_upload["content"])
-                                    upload_response.raise_for_status()
-                                    record["purchase_order_path"] = new_purchase_order_path
-                                    record["purchase_order_filename"] = pending_upload["filename"]
-                                    record["purchase_order_amount"] = round(float(purchase_order_amount), 2)
-                                    record["purchase_order_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                                    ensure_remote_folder("OV-Chimie/Factures")
+                                    safe_invoice_name = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(pending_invoice["filename"])).strip("-") or "facture"
+                                    invoice_path = f"OV-Chimie/Factures/{selected_id}_{safe_invoice_name}"
+                                    invoice_response = webdav_request("PUT", invoice_path, data=pending_invoice["content"])
+                                    invoice_response.raise_for_status()
+                                    now_invoice = datetime.now().astimezone().isoformat(timespec="seconds")
+                                    record["invoice_path"] = invoice_path
+                                    record["invoice_filename"] = pending_invoice["filename"]
+                                    record["invoice_amount"] = round(float(invoice_amount), 2)
+                                    record["invoice_updated_at"] = now_invoice
                                     save_metadata(records)
-                                    st.session_state.pop(f"pending_purchase_order_{selected_id}", None)
-                                    st.session_state[f"show_purchase_order_amount_dialog_{selected_id}"] = False
-                                    st.success("Bon de commande et montant enregistrés." if st.session_state.language == "fr" else "Purchase order and amount saved.")
+                                    st.session_state.pop(f"pending_invoice_{selected_id}", None)
+                                    st.session_state[f"show_invoice_amount_dialog_{selected_id}"] = False
+                                    st.success("Facture et montant réel facturé enregistrés." if st.session_state.language == "fr" else "Invoice and actual invoiced amount saved.")
                                     st.rerun()
                                 except Exception as exc:
-                                    st.error(("Impossible d'enregistrer le bon de commande : " if st.session_state.language == "fr" else "Could not save purchase order: ") + str(exc))
-                        if cancel_purchase_order:
-                            st.session_state.pop(f"pending_purchase_order_{selected_id}", None)
-                            st.session_state[f"show_purchase_order_amount_dialog_{selected_id}"] = False
+                                    st.error(("Impossible d'enregistrer la facture : " if st.session_state.language == "fr" else "Could not save invoice: ") + str(exc))
+                        if cancel_invoice:
+                            st.session_state.pop(f"pending_invoice_{selected_id}", None)
+                            st.session_state[f"show_invoice_amount_dialog_{selected_id}"] = False
                             st.rerun()
 
-                    purchase_order_amount_dialog()
+                    invoice_amount_dialog()
 
                 status_options = ["pending", "accepted", "refused"]
                 status_display = [t("status_pending"), t("status_accepted"), t("status_refused")]
