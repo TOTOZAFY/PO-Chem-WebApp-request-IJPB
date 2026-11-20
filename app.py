@@ -866,6 +866,10 @@ def build_submission_notification_body(record, document_path, language="fr"):
     """Build a concise submission email containing only request details and requested analyses."""
     is_fr = language == "fr"
     missing = "Non renseigné" if is_fr else "Not provided"
+
+    def clean(value):
+        return " ".join(str(value or "").replace("\\r", " ").replace("\\n", " ").split())
+
     manager = " ".join(
         str(part).strip()
         for part in (record.get("project_manager", ""), record.get("project_manager_first_name", ""))
@@ -880,18 +884,18 @@ def build_submission_notification_body(record, document_path, language="fr"):
         "1. INFORMATIONS SUR LA DEMANDE" if is_fr else "1. REQUEST INFORMATION",
         "------------------------------------------------------------",
         ("Référence complète : " if is_fr else "Full request reference: ") + public_request_reference(record),
-        ("Projet : " if is_fr else "Project: ") + str(record.get("project_name") or missing),
+        ("Projet : " if is_fr else "Project: ") + clean(record.get("project_name")) or missing,
         ("Responsable du projet : " if is_fr else "Project manager: ") + manager,
-        ("E-mail du demandeur : " if is_fr else "Requester email: ") + str(record.get("manager_email") or missing),
-        ("Téléphone : " if is_fr else "Phone: ") + str(record.get("manager_phone") or missing),
-        ("Groupe / laboratoire : " if is_fr else "Group / laboratory: ") + str(record.get("group") or missing),
-        ("Adresse du laboratoire : " if is_fr else "Laboratory address: ") + str(record.get("group_address") or missing),
-        ("Type de laboratoire : " if is_fr else "Laboratory type: ") + str(record.get("visibility") or missing),
+        ("E-mail du demandeur : " if is_fr else "Requester email: ") + clean(record.get("manager_email")) or missing,
+        ("Téléphone : " if is_fr else "Phone: ") + clean(record.get("manager_phone")) or missing,
+        ("Groupe / laboratoire : " if is_fr else "Group / laboratory: ") + clean(record.get("group")) or missing,
+        ("Adresse du laboratoire : " if is_fr else "Laboratory address: ") + clean(record.get("group_address")) or missing,
+        ("Type de laboratoire : " if is_fr else "Laboratory type: ") + clean(record.get("visibility")) or missing,
     ]
 
     operator = record.get("assigned_operator") or record.get("operator_name")
     if operator:
-        lines.append(("Opérateur en charge : " if is_fr else "Assigned operator: ") + str(operator))
+        lines.append(("Opérateur en charge : " if is_fr else "Assigned operator: ") + clean(operator))
 
     lines += [
         "",
@@ -912,15 +916,15 @@ def build_submission_notification_body(record, document_path, language="fr"):
             total_samples += int(sample_count or 0)
         except (TypeError, ValueError):
             pass
-        lines.append(f"Analyse {index} : " + str(item.get("analysis_type") or missing))
+        lines.append(f"Analyse {index} : " + clean(item.get("analysis_type")) or missing)
         lines.append(
             ("   Nombre d’échantillons : " if is_fr else "   Number of samples: ")
-            + (str(sample_count) if sample_count not in (None, "") else missing)
+            + (clean(sample_count) if sample_count not in (None, "") else missing)
         )
         mode = item.get("analysis_mode")
         if mode:
-            lines.append(("   Mode d’injection / ionisation : " if is_fr else "   Injection / ionization mode: ") + str(mode))
-        details = str(item.get("analysis_details") or "").strip()
+            lines.append(("   Mode d’injection / ionisation : " if is_fr else "   Injection / ionization mode: ") + clean(mode))
+        details = clean(item.get("analysis_details"))
         if details:
             lines.append(("   Précisions : " if is_fr else "   Details: ") + details)
         lines.append("")
@@ -934,7 +938,7 @@ def build_submission_notification_body(record, document_path, language="fr"):
         "Cordialement,",
         "Plateforme OV-Chimie-Métabolisme" if is_fr else "OV-Chimie-Metabolisme Platform",
     ]
-    return "\\n".join(lines)
+    return "\n".join(lines)
 
 
 
