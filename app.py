@@ -862,6 +862,82 @@ def public_request_reference(record):
     return request_display_label(record, include_date=False)
 
 
+def build_submission_notification_body(record, document_path, language="fr"):
+    """Build a concise submission email containing only request details and requested analyses."""
+    is_fr = language == "fr"
+    missing = "Non renseigné" if is_fr else "Not provided"
+    manager = " ".join(
+        str(part).strip()
+        for part in (record.get("project_manager", ""), record.get("project_manager_first_name", ""))
+        if str(part or "").strip()
+    ) or missing
+
+    lines = [
+        "Bonjour," if is_fr else "Hello,",
+        "",
+        "Une nouvelle demande d’analyse a été soumise." if is_fr else "A new analysis request has been submitted.",
+        "",
+        "1. INFORMATIONS SUR LA DEMANDE" if is_fr else "1. REQUEST INFORMATION",
+        "------------------------------------------------------------",
+        ("Référence complète : " if is_fr else "Full request reference: ") + public_request_reference(record),
+        ("Projet : " if is_fr else "Project: ") + str(record.get("project_name") or missing),
+        ("Responsable du projet : " if is_fr else "Project manager: ") + manager,
+        ("E-mail du demandeur : " if is_fr else "Requester email: ") + str(record.get("manager_email") or missing),
+        ("Téléphone : " if is_fr else "Phone: ") + str(record.get("manager_phone") or missing),
+        ("Groupe / laboratoire : " if is_fr else "Group / laboratory: ") + str(record.get("group") or missing),
+        ("Adresse du laboratoire : " if is_fr else "Laboratory address: ") + str(record.get("group_address") or missing),
+        ("Type de laboratoire : " if is_fr else "Laboratory type: ") + str(record.get("visibility") or missing),
+    ]
+
+    operator = record.get("assigned_operator") or record.get("operator_name")
+    if operator:
+        lines.append(("Opérateur en charge : " if is_fr else "Assigned operator: ") + str(operator))
+
+    lines += [
+        "",
+        "2. ANALYSES DEMANDÉES" if is_fr else "2. REQUESTED ANALYSES",
+        "------------------------------------------------------------",
+    ]
+
+    analysis_items = record.get("analysis_items") or [{
+        "analysis_type": record.get("analysis_type", ""),
+        "analysis_mode": record.get("analysis_mode", ""),
+        "sample_count": record.get("sample_count"),
+        "analysis_details": record.get("analysis_details", ""),
+    }]
+    total_samples = 0
+    for index, item in enumerate(analysis_items, 1):
+        sample_count = item.get("sample_count")
+        try:
+            total_samples += int(sample_count or 0)
+        except (TypeError, ValueError):
+            pass
+        lines.append(f"Analyse {index} : " + str(item.get("analysis_type") or missing))
+        lines.append(
+            ("   Nombre d’échantillons : " if is_fr else "   Number of samples: ")
+            + (str(sample_count) if sample_count not in (None, "") else missing)
+        )
+        mode = item.get("analysis_mode")
+        if mode:
+            lines.append(("   Mode d’injection / ionisation : " if is_fr else "   Injection / ionization mode: ") + str(mode))
+        details = str(item.get("analysis_details") or "").strip()
+        if details:
+            lines.append(("   Précisions : " if is_fr else "   Details: ") + details)
+        lines.append("")
+
+    lines.append(
+        ("Nombre total d’échantillons : " if is_fr else "Total number of samples: ")
+        + str(total_samples)
+    )
+    lines += [
+        "",
+        "Cordialement,",
+        "Plateforme OV-Chimie-Métabolisme" if is_fr else "OV-Chimie-Metabolisme Platform",
+    ]
+    return "\\n".join(lines)
+
+
+
 def build_document(form_data):
     doc = Document(TEMPLATE_PATH)
     if len(doc.tables) < 2:
@@ -4098,22 +4174,8 @@ def render_form():
                             send_email(
                                 admin_email,
                                 t("mail_admin_subject"),
-                                (
-                                    t("mail_admin_body").format(
-                                    project=record["project_name"],
-                                    manager=" ".join(
-                                        part for part in (
-                                            record.get("project_manager", ""),
-                                            record.get("project_manager_first_name", ""),
-                                        ) if str(part or "").strip()
-                                    ),
-                                    group=record["group"],
-                                    analysis_type=" ; ".join(x.get("analysis_type", "") for x in record.get("analysis_items", [])) or record.get("analysis_type", ""),
-                                    analysis_details=record.get("analysis_details", "") or ("Non applicable" if st.session_state.language == "fr" else "Not applicable"),
-                                    path=remote_file,
-                                    )
-                                    + ("\\nRéférence complète : " if st.session_state.language == "fr" else "\\nFull request reference: ")
-                                    + public_request_reference(record)
+                                build_submission_notification_body(
+                                    record, remote_file, st.session_state.language
                                 ),
                                 cc=platform_staff_cc,
                                 reply_to=record.get("manager_email", "").strip() or None,
