@@ -2002,6 +2002,100 @@ def render_admin():
     active_records = [r for r in records if not r.get("archived", False)]
     archived_records = [r for r in records if r.get("archived", False)]
     st.subheader("Gestion des demandes" if st.session_state.language == "fr" else "Request management")
+
+    import html as html_lib
+
+    progress_stages = [
+        ("decision", "Décision", "Decision"),
+        ("unsigned_quote", "Devis non signé", "Unsigned quote"),
+        ("signed_quote", "Devis signé", "Signed quote"),
+        ("purchase_order", "Bon de commande", "Purchase order"),
+        ("invoice", "Facturation", "Invoicing"),
+    ]
+
+    def request_progress(record):
+        status = str(record.get("status", "pending") or "pending").lower()
+        states = {}
+        if status == "accepted":
+            states["decision"] = "done"
+        elif status == "refused":
+            states["decision"] = "refused"
+        else:
+            states["decision"] = "waiting"
+        states["unsigned_quote"] = "done" if record.get("unsigned_quote_path") else "todo"
+        states["signed_quote"] = "done" if record.get("signed_quote_path") else "todo"
+        states["purchase_order"] = "done" if record.get("purchase_order_path") else "todo"
+        states["invoice"] = "done" if record.get("invoice_path") and record.get("invoice_amount") not in (None, "") else "todo"
+        return states
+
+    def progress_html(record, compact=False):
+        states = request_progress(record)
+        colors = {"done": "#23965A", "waiting": "#E5A000", "todo": "#D7DCE2", "refused": "#C83E4D"}
+        labels = []
+        segments = []
+        for key, label_fr, label_en in progress_stages:
+            label = label_fr if st.session_state.language == "fr" else label_en
+            state = states[key]
+            color = colors[state]
+            segments.append(
+                f'<div title="{html_lib.escape(label)}" style="flex:1;height:12px;background:{color};border-radius:5px;margin-right:4px;"></div>'
+            )
+            if not compact:
+                symbol = "✓" if state == "done" else ("✕" if state == "refused" else ("●" if state == "waiting" else "○"))
+                labels.append(
+                    f'<div style="flex:1;min-width:90px;font-size:12px;color:#344054;text-align:center;">'
+                    f'<span style="color:{color};font-weight:700;font-size:15px;">{symbol}</span><br>{html_lib.escape(label)}</div>'
+                )
+        if compact:
+            return '<div style="display:flex;gap:2px;min-width:160px;">' + "".join(segments) + "</div>"
+        return (
+            '<div style="display:flex;gap:2px;margin:8px 0 5px 0;">' + "".join(segments) + "</div>"
+            '<div style="display:flex;gap:4px;justify-content:space-between;">' + "".join(labels) + "</div>"
+        )
+
+    all_request_records = active_records + archived_records
+    with st.expander("Suivi global de l’avancement des demandes" if st.session_state.language == "fr" else "Overall request progress", expanded=True):
+        st.caption(
+            "Vert : étape réalisée · Orange : décision en attente · Rouge : demande refusée · Gris : étape non réalisée."
+            if st.session_state.language == "fr"
+            else "Green: completed · Orange: decision pending · Red: request refused · Grey: not completed."
+        )
+        if not all_request_records:
+            st.info(t("no_requests"))
+        else:
+            rows_html = []
+            for item in sorted(all_request_records, key=lambda x: str(x.get("submitted_at", "")), reverse=True):
+                ref = public_request_reference(item) if item.get("id") else "—"
+                project = str(item.get("project_name", "") or "—")
+                requester = str(item.get("project_manager", "") or "—")
+                status_raw = str(item.get("status", "pending") or "pending").lower()
+                status_label = (
+                    {"accepted": "Acceptée", "refused": "Refusée", "pending": "En attente"}.get(status_raw, status_raw)
+                    if st.session_state.language == "fr"
+                    else {"accepted": "Accepted", "refused": "Rejected", "pending": "Pending"}.get(status_raw, status_raw)
+                )
+                rows_html.append(
+                    "<tr>"
+                    f"<td>{html_lib.escape(ref)}</td>"
+                    f"<td>{html_lib.escape(project)}</td>"
+                    f"<td>{html_lib.escape(requester)}</td>"
+                    f"<td>{html_lib.escape(status_label)}</td>"
+                    f"<td>{progress_html(item, compact=True)}</td>"
+                    "</tr>"
+                )
+            headers = (
+                ["Référence complète", "Projet", "Demandeur", "Décision", "Progression"]
+                if st.session_state.language == "fr"
+                else ["Full reference", "Project", "Requester", "Decision", "Progress"]
+            )
+            st.markdown(
+                '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
+                "<thead><tr>" + "".join(
+                    f'<th style="text-align:left;padding:9px;border-bottom:1px solid #D0D5DD;">{h}</th>' for h in headers
+                ) + "</tr></thead><tbody>" + "".join(rows_html) + "</tbody></table></div>",
+                unsafe_allow_html=True,
+            )
+
     active_tab, archive_tab = st.tabs([
         "📋 Demandes actives" if st.session_state.language == "fr" else "📋 Active requests",
         "🗄️ Archives" if st.session_state.language == "fr" else "🗄️ Archive",
@@ -2099,6 +2193,8 @@ def render_admin():
                 )
             if selected_id is not None:
                 record = next(r for r in active_records if r.get("id") == selected_id)
+                st.markdown("**Avancement de la demande**" if st.session_state.language == "fr" else "**Request progress**")
+                st.markdown(progress_html(record), unsafe_allow_html=True)
                 with st.expander("Gestion partie plateforme" if st.session_state.language == "fr" else "Platform management", expanded=False):
                     with st.expander("Informations de la demande" if st.session_state.language == "fr" else "Request information", expanded=False):
                         st.write(f"**{t('manager')} :** {record.get('project_manager','')}")
