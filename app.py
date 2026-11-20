@@ -2576,213 +2576,216 @@ def render_admin():
                 )
             if selected_id is not None:
                 record = next(r for r in active_records if r.get("id") == selected_id)
-                st.write(f"**{t('manager')} :** {record.get('project_manager','')}")
-                requester_email = record.get("manager_email", "").strip()
-                if requester_email:
-                    st.markdown(f"**{t('manager_email')} :** [{requester_email}](mailto:{requester_email})")
-                else:
-                    st.write(f"**{t('manager_email')} :** —")
-                st.write(f"**{t('group')} :** {record.get('group','')}")
-                st.write(f"**{t('group_address')} :** {record.get('group_address','')}")
-                st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
+                with st.expander("Informations de la demande" if st.session_state.language == "fr" else "Request information", expanded=False):
+                    st.write(f"**{t('manager')} :** {record.get('project_manager','')}")
+                    requester_email = record.get("manager_email", "").strip()
+                    if requester_email:
+                        st.markdown(f"**{t('manager_email')} :** [{requester_email}](mailto:{requester_email})")
+                    else:
+                        st.write(f"**{t('manager_email')} :** —")
+                    st.write(f"**{t('group')} :** {record.get('group','')}")
+                    st.write(f"**{t('group_address')} :** {record.get('group_address','')}")
+                    st.write(f"**{t('project_name')} :** {record.get('project_name','')}")
     
-                # Operator assigned to perform the analyses for this request.
-                operator_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
-                operator_save_label = "Enregistrer l’opérateur" if st.session_state.language == "fr" else "Save assigned operator"
-                try:
-                    operators_directory = load_operators_directory()
-                except Exception as exc:
-                    operators_directory = []
-                    st.error(
-                        f"Impossible de charger le répertoire des opérateurs depuis Nextcloud : {exc}"
-                        if st.session_state.language == "fr"
-                        else f"Could not load the operator directory from Nextcloud: {exc}"
-                    )
-
-                current_operator = {
-                    "name": str(record.get("assigned_operator", "")).strip(),
-                    "email": str(record.get("assigned_operator_email", "")).strip(),
-                }
-                operator_choices = [{"name": "", "email": ""}] + operators_directory.copy()
-                if current_operator["name"] and current_operator not in operator_choices:
-                    operator_choices.append(current_operator)
-                current_index = next(
-                    (i for i, op in enumerate(operator_choices)
-                     if op["name"] == current_operator["name"] and op["email"] == current_operator["email"]),
-                    0,
-                )
-                selected_operator = st.selectbox(
-                    operator_label,
-                    options=operator_choices,
-                    index=current_index,
-                    format_func=lambda op: (
-                        f"{op['name']} — {op['email']}" if op["name"] else
-                        ("Aucun opérateur" if st.session_state.language == "fr" else "No operator")
-                    ),
-                    key=f"assigned_operator_select_{selected_id}",
-                )
-                operator_email_label = (
-                    "Adresse e-mail de la personne en charge de l’analyse"
-                    if st.session_state.language == "fr"
-                    else "Email address of the person responsible for the analysis"
-                )
-                st.text_input(
-                    operator_email_label,
-                    value=selected_operator["email"],
-                    disabled=True,
-                    key=f"assigned_operator_email_display_{selected_id}_{selected_operator['name']}_{selected_operator['email']}",
-                )
-                if st.button(operator_save_label, key=f"save_assigned_operator_{selected_id}"):
-                    record["assigned_operator"] = selected_operator["name"]
-                    record["assigned_operator_email"] = selected_operator["email"]
-                    record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if selected_operator["name"] else ""
+                    # Operator assigned to perform the analyses for this request.
+                    operator_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
+                    operator_save_label = "Enregistrer l’opérateur" if st.session_state.language == "fr" else "Save assigned operator"
                     try:
-                        save_metadata(records)
-                        st.success("Opérateur et adresse e-mail enregistrés pour cette demande." if st.session_state.language == "fr" else "Operator and email address saved for this request.")
-                        st.rerun()
+                        operators_directory = load_operators_directory()
                     except Exception as exc:
-                        st.error(f"{t('cloud_error')} {exc}")
+                        operators_directory = []
+                        st.error(
+                            f"Impossible de charger le répertoire des opérateurs depuis Nextcloud : {exc}"
+                            if st.session_state.language == "fr"
+                            else f"Could not load the operator directory from Nextcloud: {exc}"
+                        )
 
-                with st.expander("Ajouter un opérateur au répertoire" if st.session_state.language == "fr" else "Add an operator to the directory"):
-                    new_operator_name = st.text_input(
-                        "Nom de l’opérateur" if st.session_state.language == "fr" else "Operator name",
-                        key=f"new_operator_name_{selected_id}",
+                    current_operator = {
+                        "name": str(record.get("assigned_operator", "")).strip(),
+                        "email": str(record.get("assigned_operator_email", "")).strip(),
+                    }
+                    operator_choices = [{"name": "", "email": ""}] + operators_directory.copy()
+                    if current_operator["name"] and current_operator not in operator_choices:
+                        operator_choices.append(current_operator)
+                    current_index = next(
+                        (i for i, op in enumerate(operator_choices)
+                         if op["name"] == current_operator["name"] and op["email"] == current_operator["email"]),
+                        0,
                     )
-                    new_operator_email = st.text_input(
-                        "Adresse e-mail" if st.session_state.language == "fr" else "Email address",
-                        placeholder="nom@inrae.fr",
-                        key=f"new_operator_email_{selected_id}",
+                    selected_operator = st.selectbox(
+                        operator_label,
+                        options=operator_choices,
+                        index=current_index,
+                        format_func=lambda op: (
+                            f"{op['name']} — {op['email']}" if op["name"] else
+                            ("Aucun opérateur" if st.session_state.language == "fr" else "No operator")
+                        ),
+                        key=f"assigned_operator_select_{selected_id}",
                     )
-                    if st.button(
-                        "Ajouter cet opérateur" if st.session_state.language == "fr" else "Add this operator",
-                        key=f"add_operator_directory_{selected_id}",
-                    ):
-                        clean_name = new_operator_name.strip()
-                        clean_email = new_operator_email.strip()
-                        valid_email = bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", clean_email))
-                        if not clean_name or not valid_email:
-                            st.error(
-                                "Renseignez un nom et une adresse e-mail valide."
-                                if st.session_state.language == "fr"
-                                else "Enter a name and a valid email address."
-                            )
-                        elif any(op["name"].casefold() == clean_name.casefold() for op in operators_directory):
-                            st.error(
-                                "Un opérateur portant déjà ce nom existe dans le répertoire."
-                                if st.session_state.language == "fr"
-                                else "An operator with this name already exists in the directory."
-                            )
-                        else:
-                            try:
-                                operators_directory.append({"name": clean_name, "email": clean_email})
-                                save_operators_directory(operators_directory)
-                                st.success(
-                                    "Opérateur ajouté au répertoire. Il est maintenant disponible dans le menu déroulant."
-                                    if st.session_state.language == "fr"
-                                    else "Operator added. It is now available in the dropdown."
-                                )
-                                st.rerun()
-                            except Exception as exc:
-                                st.error(f"{t('cloud_error')} {exc}")
-    
-                with st.expander("Supprimer un opérateur du répertoire" if st.session_state.language == "fr" else "Remove an operator from the directory"):
-                    if operators_directory:
-                        operator_to_remove = st.selectbox(
-                            "Opérateur à supprimer" if st.session_state.language == "fr" else "Operator to remove",
-                            options=operators_directory,
-                            format_func=lambda op: f"{op['name']} — {op['email']}",
-                            key=f"remove_operator_select_{selected_id}",
+                    operator_email_label = (
+                        "Adresse e-mail de la personne en charge de l’analyse"
+                        if st.session_state.language == "fr"
+                        else "Email address of the person responsible for the analysis"
+                    )
+                    st.text_input(
+                        operator_email_label,
+                        value=selected_operator["email"],
+                        disabled=True,
+                        key=f"assigned_operator_email_display_{selected_id}_{selected_operator['name']}_{selected_operator['email']}",
+                    )
+                    if st.button(operator_save_label, key=f"save_assigned_operator_{selected_id}"):
+                        record["assigned_operator"] = selected_operator["name"]
+                        record["assigned_operator_email"] = selected_operator["email"]
+                        record["operator_assigned_at"] = datetime.now().astimezone().isoformat(timespec="seconds") if selected_operator["name"] else ""
+                        try:
+                            save_metadata(records)
+                            st.success("Opérateur et adresse e-mail enregistrés pour cette demande." if st.session_state.language == "fr" else "Operator and email address saved for this request.")
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(f"{t('cloud_error')} {exc}")
+
+                    with st.expander("Ajouter un opérateur au répertoire" if st.session_state.language == "fr" else "Add an operator to the directory"):
+                        new_operator_name = st.text_input(
+                            "Nom de l’opérateur" if st.session_state.language == "fr" else "Operator name",
+                            key=f"new_operator_name_{selected_id}",
+                        )
+                        new_operator_email = st.text_input(
+                            "Adresse e-mail" if st.session_state.language == "fr" else "Email address",
+                            placeholder="nom@inrae.fr",
+                            key=f"new_operator_email_{selected_id}",
                         )
                         if st.button(
-                            "Supprimer cet opérateur du répertoire" if st.session_state.language == "fr" else "Remove this operator from the directory",
-                            key=f"remove_operator_directory_{selected_id}",
+                            "Ajouter cet opérateur" if st.session_state.language == "fr" else "Add this operator",
+                            key=f"add_operator_directory_{selected_id}",
                         ):
-                            try:
-                                operators_directory = [
-                                    op for op in operators_directory
-                                    if not (
-                                        op["name"].casefold() == operator_to_remove["name"].casefold()
-                                        and op["email"].casefold() == operator_to_remove["email"].casefold()
-                                    )
-                                ]
-                                save_operators_directory(operators_directory)
-                                st.success(
-                                    "Opérateur supprimé du répertoire. Les demandes déjà affectées à cet opérateur ne sont pas modifiées."
+                            clean_name = new_operator_name.strip()
+                            clean_email = new_operator_email.strip()
+                            valid_email = bool(re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", clean_email))
+                            if not clean_name or not valid_email:
+                                st.error(
+                                    "Renseignez un nom et une adresse e-mail valide."
                                     if st.session_state.language == "fr"
-                                    else "Operator removed from the directory. Existing request assignments are unchanged."
+                                    else "Enter a name and a valid email address."
                                 )
-                                st.rerun()
-                            except Exception as exc:
-                                st.error(f"{t('cloud_error')} {exc}")
-                    else:
-                        st.info(
-                            "Aucun opérateur enregistré dans le répertoire."
-                            if st.session_state.language == "fr"
-                            else "No operators are saved in the directory."
-                        )
-
-                stored_type = record.get("analysis_type", "")
-                shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
-                admin_analysis_items = record.get("analysis_items") or [{"analysis_type": stored_type, "analysis_mode": record.get("analysis_mode", ""), "sample_count": record.get("sample_count", 1), "analysis_details": record.get("analysis_details", "")}]
-                for analysis_number, analysis in enumerate(admin_analysis_items, 1):
-                    raw_type = analysis.get("analysis_type", "")
-                    display_type = raw_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(raw_type, ANALYSIS_TYPES_EN.get(raw_type, raw_type))
-                    st.write(f"**Analyse {analysis_number if st.session_state.language == 'fr' else 'Analysis ' + str(analysis_number)} :** {display_type} — {analysis.get('sample_count', 1)} échantillon(s)")
-                    if analysis.get("analysis_mode"):
-                        st.caption(f"{t('analysis_mode')} : {analysis.get('analysis_mode')}")
-                    if analysis.get("analysis_details"):
-                        st.caption(f"{t('specific_development_details')} : {analysis.get('analysis_details')}")
-                st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
-                request_status = record.get("status", "pending")
-                request_status_labels = {
-                    "pending": t("status_pending"),
-                    "accepted": t("status_accepted"),
-                    "refused": t("status_refused"),
-                }
-                status_label = "Statut de la demande" if st.session_state.language == "fr" else "Request status"
-                st.write(f"**{status_label} :** {request_status_labels.get(request_status, request_status or '—')}")
-                operator_status_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
-                operator_status_value = record.get("assigned_operator", "").strip() or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
-                st.write(f"**{operator_status_label} :** {operator_status_value}")
-                po_status_label = "Statut du bon de commande" if st.session_state.language == "fr" else "Purchase order status"
-                po_status_value = ("Reçu" if st.session_state.language == "fr" else "Received") if record.get("purchase_order_received") or record.get("purchase_order_path") else ("En attente" if st.session_state.language == "fr" else "Pending")
-                st.write(f"**{po_status_label} :** {po_status_value}")
-                documents_heading = "État des documents" if st.session_state.language == "fr" else "Document status"
-                st.markdown(f"**{documents_heading}**")
-                uploaded_label = "Importé" if st.session_state.language == "fr" else "Uploaded"
-                missing_label = "Non importé" if st.session_state.language == "fr" else "Not uploaded"
-                document_statuses = [
-                    ("Feuille de demande (PDF)" if st.session_state.language == "fr" else "Request form (PDF)", record.get("document_path", "")),
-                    ("Devis non signé" if st.session_state.language == "fr" else "Unsigned quotation", record.get("unsigned_quote_path", "")),
-                    ("Devis signé" if st.session_state.language == "fr" else "Signed quotation", record.get("signed_quote_path", "")),
-                    ("Bon de commande" if st.session_state.language == "fr" else "Purchase order", record.get("purchase_order_path", "")),
-                    ("Classeur FAIR" if st.session_state.language == "fr" else "FAIR workbook", record.get("fair_path", "")),
-                ]
-                for document_label, document_path_value in document_statuses:
-                    document_state = uploaded_label if document_path_value else missing_label
-                    st.write(f"- **{document_label} :** {document_state}")
-                    if document_path_value:
-                        st.caption(os.path.basename(str(document_path_value)))
-
-                fair_status_heading = "État des feuilles FAIR" if st.session_state.language == "fr" else "FAIR sheet completion"
-                st.markdown(f"**{fair_status_heading}**")
-                try:
-                    sheet_statuses = fair_sheet_completion_status(record)
-                    sheet_names_fr = {
-                        "Sample": "Sample",
-                        "Analysis": "Analysis",
-                        "Data treatment": "Data treatment",
-                        "Pipeline Step by Step": "Pipeline Step by Step",
-                    }
-                    for sheet_name, has_content in sheet_statuses.items():
-                        sheet_label = sheet_names_fr[sheet_name]
-                        if st.session_state.language == "fr":
-                            state_text = "Données saisies" if has_content else "Non renseignée"
+                            elif any(op["name"].casefold() == clean_name.casefold() for op in operators_directory):
+                                st.error(
+                                    "Un opérateur portant déjà ce nom existe dans le répertoire."
+                                    if st.session_state.language == "fr"
+                                    else "An operator with this name already exists in the directory."
+                                )
+                            else:
+                                try:
+                                    operators_directory.append({"name": clean_name, "email": clean_email})
+                                    save_operators_directory(operators_directory)
+                                    st.success(
+                                        "Opérateur ajouté au répertoire. Il est maintenant disponible dans le menu déroulant."
+                                        if st.session_state.language == "fr"
+                                        else "Operator added. It is now available in the dropdown."
+                                    )
+                                    st.rerun()
+                                except Exception as exc:
+                                    st.error(f"{t('cloud_error')} {exc}")
+    
+                    with st.expander("Supprimer un opérateur du répertoire" if st.session_state.language == "fr" else "Remove an operator from the directory"):
+                        if operators_directory:
+                            operator_to_remove = st.selectbox(
+                                "Opérateur à supprimer" if st.session_state.language == "fr" else "Operator to remove",
+                                options=operators_directory,
+                                format_func=lambda op: f"{op['name']} — {op['email']}",
+                                key=f"remove_operator_select_{selected_id}",
+                            )
+                            if st.button(
+                                "Supprimer cet opérateur du répertoire" if st.session_state.language == "fr" else "Remove this operator from the directory",
+                                key=f"remove_operator_directory_{selected_id}",
+                            ):
+                                try:
+                                    operators_directory = [
+                                        op for op in operators_directory
+                                        if not (
+                                            op["name"].casefold() == operator_to_remove["name"].casefold()
+                                            and op["email"].casefold() == operator_to_remove["email"].casefold()
+                                        )
+                                    ]
+                                    save_operators_directory(operators_directory)
+                                    st.success(
+                                        "Opérateur supprimé du répertoire. Les demandes déjà affectées à cet opérateur ne sont pas modifiées."
+                                        if st.session_state.language == "fr"
+                                        else "Operator removed from the directory. Existing request assignments are unchanged."
+                                    )
+                                    st.rerun()
+                                except Exception as exc:
+                                    st.error(f"{t('cloud_error')} {exc}")
                         else:
-                            state_text = "Data entered" if has_content else "Not completed"
-                        st.write(f"- **{sheet_label} :** {state_text}")
-                except Exception as fair_status_error:
-                    st.caption(("État des feuilles FAIR indisponible : " if st.session_state.language == "fr" else "FAIR sheet status unavailable: ") + str(fair_status_error))
+                            st.info(
+                                "Aucun opérateur enregistré dans le répertoire."
+                                if st.session_state.language == "fr"
+                                else "No operators are saved in the directory."
+                            )
+
+                    stored_type = record.get("analysis_type", "")
+                    shown_type = stored_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(stored_type, ANALYSIS_TYPES_EN.get(stored_type, stored_type))
+                    admin_analysis_items = record.get("analysis_items") or [{"analysis_type": stored_type, "analysis_mode": record.get("analysis_mode", ""), "sample_count": record.get("sample_count", 1), "analysis_details": record.get("analysis_details", "")}]
+                    for analysis_number, analysis in enumerate(admin_analysis_items, 1):
+                        raw_type = analysis.get("analysis_type", "")
+                        display_type = raw_type if st.session_state.language == "fr" else notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN).get(raw_type, ANALYSIS_TYPES_EN.get(raw_type, raw_type))
+                        st.write(f"**Analyse {analysis_number if st.session_state.language == 'fr' else 'Analysis ' + str(analysis_number)} :** {display_type} — {analysis.get('sample_count', 1)} échantillon(s)")
+                        if analysis.get("analysis_mode"):
+                            st.caption(f"{t('analysis_mode')} : {analysis.get('analysis_mode')}")
+                        if analysis.get("analysis_details"):
+                            st.caption(f"{t('specific_development_details')} : {analysis.get('analysis_details')}")
+                    st.write(f"**{t('doc_path')} :** `{record.get('document_path','')}`")
+                    request_status = record.get("status", "pending")
+                    request_status_labels = {
+                        "pending": t("status_pending"),
+                        "accepted": t("status_accepted"),
+                        "refused": t("status_refused"),
+                    }
+                    status_label = "Statut de la demande" if st.session_state.language == "fr" else "Request status"
+                    st.write(f"**{status_label} :** {request_status_labels.get(request_status, request_status or '—')}")
+                    operator_status_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
+                    operator_status_value = record.get("assigned_operator", "").strip() or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
+                    st.write(f"**{operator_status_label} :** {operator_status_value}")
+                    po_status_label = "Statut du bon de commande" if st.session_state.language == "fr" else "Purchase order status"
+                    po_status_value = ("Reçu" if st.session_state.language == "fr" else "Received") if record.get("purchase_order_received") or record.get("purchase_order_path") else ("En attente" if st.session_state.language == "fr" else "Pending")
+                    st.write(f"**{po_status_label} :** {po_status_value}")
+                with st.expander("État des documents" if st.session_state.language == "fr" else "Document status", expanded=False):
+                    documents_heading = "État des documents" if st.session_state.language == "fr" else "Document status"
+                    st.markdown(f"**{documents_heading}**")
+                    uploaded_label = "Importé" if st.session_state.language == "fr" else "Uploaded"
+                    missing_label = "Non importé" if st.session_state.language == "fr" else "Not uploaded"
+                    document_statuses = [
+                        ("Feuille de demande (PDF)" if st.session_state.language == "fr" else "Request form (PDF)", record.get("document_path", "")),
+                        ("Devis non signé" if st.session_state.language == "fr" else "Unsigned quotation", record.get("unsigned_quote_path", "")),
+                        ("Devis signé" if st.session_state.language == "fr" else "Signed quotation", record.get("signed_quote_path", "")),
+                        ("Bon de commande" if st.session_state.language == "fr" else "Purchase order", record.get("purchase_order_path", "")),
+                        ("Classeur FAIR" if st.session_state.language == "fr" else "FAIR workbook", record.get("fair_path", "")),
+                    ]
+                    for document_label, document_path_value in document_statuses:
+                        document_state = uploaded_label if document_path_value else missing_label
+                        st.write(f"- **{document_label} :** {document_state}")
+                        if document_path_value:
+                            st.caption(os.path.basename(str(document_path_value)))
+
+                with st.expander("État des feuilles FAIR" if st.session_state.language == "fr" else "FAIR sheet completion", expanded=False):
+                    fair_status_heading = "État des feuilles FAIR" if st.session_state.language == "fr" else "FAIR sheet completion"
+                    st.markdown(f"**{fair_status_heading}**")
+                    try:
+                        sheet_statuses = fair_sheet_completion_status(record)
+                        sheet_names_fr = {
+                            "Sample": "Sample",
+                            "Analysis": "Analysis",
+                            "Data treatment": "Data treatment",
+                            "Pipeline Step by Step": "Pipeline Step by Step",
+                        }
+                        for sheet_name, has_content in sheet_statuses.items():
+                            sheet_label = sheet_names_fr[sheet_name]
+                            if st.session_state.language == "fr":
+                                state_text = "Données saisies" if has_content else "Non renseignée"
+                            else:
+                                state_text = "Data entered" if has_content else "Not completed"
+                            st.write(f"- **{sheet_label} :** {state_text}")
+                    except Exception as fair_status_error:
+                        st.caption(("État des feuilles FAIR indisponible : " if st.session_state.language == "fr" else "FAIR sheet status unavailable: ") + str(fair_status_error))
     
                 st.subheader("FAIR – Sample")
                 fair_path = record.get("fair_path") or fair_remote_path(record)
