@@ -4073,24 +4073,74 @@ def render_purchase_order_import():
         if fr else
         "Enter the email address used for the request and its reference, then upload the purchase order."
     )
-    with st.form("requester_purchase_order_import_form", clear_on_submit=False):
-        requester_email = st.text_input(
-            "Adresse e-mail du demandeur *" if fr else "Requester email address *",
-            placeholder="nom@laboratoire.fr",
-        ).strip()
-        request_reference = st.text_input(
-            "Référence de la demande *" if fr else "Request reference *",
-            placeholder="Ex. PO-CHEM-2026-001",
-        ).strip()
-        purchase_order_file = st.file_uploader(
-            "Bon de commande * (PDF, DOC ou DOCX)" if fr else "Purchase order * (PDF, DOC or DOCX)",
-            type=["pdf", "doc", "docx"],
-            key="requester_purchase_order_file",
+    requester_email = st.text_input(
+        "Adresse e-mail du demandeur *" if fr else "Requester email address *",
+        placeholder="nom@laboratoire.fr",
+        key="requester_purchase_order_email",
+    ).strip()
+    request_reference = st.text_input(
+        "Référence de la demande *" if fr else "Request reference *",
+        placeholder="Ex. PO-CHEM-2026-001",
+        key="requester_purchase_order_reference",
+    ).strip()
+
+    email_is_valid = bool(re.fullmatch(r"[^@\\s]+@[^@\\s]+\\.[^@\\s]+", requester_email))
+    matching_record = None
+    reference_check_error = None
+    if email_is_valid and request_reference:
+        try:
+            validation_records = load_metadata()
+            matching_record = next(
+                (r for r in validation_records
+                 if str(r.get("id", "")).strip().casefold() == request_reference.casefold()
+                 and str(r.get("manager_email", "")).strip().casefold() == requester_email.casefold()
+                 and not r.get("deleted", False)),
+                None,
+            )
+        except Exception as validation_exc:
+            reference_check_error = str(validation_exc)
+
+    reference_is_valid = matching_record is not None
+    if reference_check_error:
+        st.error(
+            "Impossible de vérifier la référence pour le moment. Réessayez ultérieurement."
+            if fr else
+            "The reference could not be verified. Please try again later."
         )
-        submitted = st.form_submit_button(
-            "Envoyer le bon de commande" if fr else "Submit purchase order",
-            type="primary", use_container_width=True,
+    elif not requester_email or not request_reference:
+        st.caption(
+            "Renseignez l’adresse e-mail et la référence pour vérifier la demande."
+            if fr else
+            "Enter the email address and request reference to validate the request."
         )
+    elif not email_is_valid:
+        st.warning("L’adresse e-mail n’est pas valide." if fr else "The email address is not valid.")
+    elif reference_is_valid:
+        st.success(
+            f"Demande {matching_record.get('id')} reconnue. Vous pouvez importer le bon de commande."
+            if fr else
+            f"Request {matching_record.get('id')} verified. You can upload the purchase order."
+        )
+    else:
+        st.error(
+            "Aucune demande ne correspond à cette référence et à cette adresse e-mail. Le bouton d’envoi reste désactivé."
+            if fr else
+            "No request matches this reference and email address. The submit button remains disabled."
+        )
+
+    purchase_order_file = st.file_uploader(
+        "Bon de commande * (PDF, DOC ou DOCX)" if fr else "Purchase order * (PDF, DOC or DOCX)",
+        type=["pdf", "doc", "docx"],
+        key="requester_purchase_order_file",
+        disabled=not reference_is_valid,
+    )
+    submitted = st.button(
+        "Envoyer le bon de commande" if fr else "Submit purchase order",
+        type="primary",
+        use_container_width=True,
+        disabled=(not reference_is_valid or purchase_order_file is None or bool(reference_check_error)),
+        key="requester_purchase_order_submit",
+    )
 
     if not submitted:
         return
