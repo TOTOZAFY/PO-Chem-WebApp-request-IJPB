@@ -4333,8 +4333,8 @@ def render_purchase_order_import():
             uploaded_labels.append(("Bon de commande", purchase_order_file.name))
 
         save_metadata(records)
-        uploaded_summary_fr = " et ".join(f"{label} : {filename}" for label, filename in uploaded_labels)
-        uploaded_summary_en = " and ".join(f"{'Signed quotation' if label == 'Devis signé' else 'Purchase order'}: {filename}" for label, filename in uploaded_labels)
+        uploaded_summary_fr = "\\n".join(f"- {label} : {filename}" for label, filename in uploaded_labels)
+        uploaded_summary_en = "\\n".join(f"- {'Signed quotation' if label == 'Devis signé' else 'Purchase order'}: {filename}" for label, filename in uploaded_labels)
 
         notification_errors = []
         # Internal notification: IJPB administrative staff is the primary
@@ -4364,10 +4364,10 @@ def render_purchase_order_import():
                 f"- Laboratoire / Groupe : {record.get('group', '') or 'Non renseigné'}\\n"
                 f"- Adresse du laboratoire : {record.get('group_address', '') or 'Non renseignée'}\\n"
                 f"- Demandeur : {record.get('project_manager', '') or 'Non renseigné'}\\n"
-                f"- Adresse e-mail : {requester_email}\\n"
+                f"Adresse e-mail du demandeur :\\n{requester_email}\\n\\n"
                 f"- Opérateur en charge de l'analyse : {record.get('assigned_operator', '') or 'Non renseigné'}\\n\\n"
                 f"DOCUMENT(S) REÇU(S)\\n\\n"
-                f"- {uploaded_summary_fr}\\n"
+                f"{uploaded_summary_fr}\\n"
                 f"- Date de réception : {received_at}\\n\\n"
                 f"Les documents ont été enregistrés dans Nextcloud et associés à la référence de cette demande.\\n\\n"
                 f"Merci de prendre en compte cette mise à jour."
@@ -4380,10 +4380,10 @@ def render_purchase_order_import():
                 f"- Laboratory / Group: {record.get('group', '') or 'Not specified'}\\n"
                 f"- Laboratory address: {record.get('group_address', '') or 'Not specified'}\\n"
                 f"- Requester: {record.get('project_manager', '') or 'Not specified'}\\n"
-                f"- Email address: {requester_email}\\n"
+                f"Requester email address:\\n{requester_email}\\n\\n"
                 f"- Analysis operator: {record.get('assigned_operator', '') or 'Not specified'}\\n\\n"
                 f"DOCUMENT(S) RECEIVED\\n\\n"
-                f"- {uploaded_summary_en}\\n"
+                f"{uploaded_summary_en}\\n"
                 f"- Date received: {datetime.fromisoformat(now).astimezone().strftime('%d/%m/%Y at %H:%M:%S')}\\n\\n"
                 f"The documents have been saved in Nextcloud and linked to this request reference.\\n\\n"
                 f"Please take this update into account."
@@ -4401,22 +4401,36 @@ def render_purchase_order_import():
                 f"Confirmation de dépôt de document(s) – {public_request_reference(record)}"
                 if fr else f"Document upload confirmation – {public_request_reference(record)}"
             )
+            requester_received_at = datetime.fromisoformat(now).astimezone().strftime("%d/%m/%Y à %H:%M:%S")
+            requester_received_at_en = datetime.fromisoformat(now).astimezone().strftime("%d/%m/%Y at %H:%M:%S")
             requester_body = (
                 f"Bonjour,\\n\\n"
-                f"Nous vous confirmons la réception du/des document(s) suivant(s) pour la demande {public_request_reference(record)}.\\n\\n"
-                f"Projet : {record.get('project_name', '')}\\n"
-                f"Référence complète de la demande : {public_request_reference(record)}\\n"
-                f"Document(s) reçu(s) : {uploaded_summary_fr}\\n"
-                f"Date de réception : {now}\\n\\n"
+                f"Nous vous confirmons la réception du/des document(s) suivant(s) pour votre demande.\\n\\n"
+                f"INFORMATIONS SUR LA DEMANDE\\n"
+                f"------------------------------------------------------------\\n"
+                f"Référence complète :\\n{public_request_reference(record)}\\n"
+                f"------------------------------------------------------------\\n"
+                f"Projet : {record.get('project_name', '')}\\n\\n"
+                f"DOCUMENT(S) REÇU(S)\\n"
+                f"------------------------------------------------------------\\n"
+                f"{uploaded_summary_fr}\\n"
+                f"------------------------------------------------------------\\n"
+                f"Date de réception : {requester_received_at}\\n\\n"
                 f"Vos documents ont été enregistrés dans l'espace Nextcloud de la plateforme OV-Chimie.\\n\\n"
                 f"Cordialement,\\nL’équipe OV-Chimie"
                 if fr else
                 f"Hello,\\n\\n"
-                f"This email confirms receipt of the following document(s) for request {public_request_reference(record)}.\\n\\n"
-                f"Project: {record.get('project_name', '')}\\n"
-                f"Full request reference: {public_request_reference(record)}\\n"
-                f"Document(s) received: {uploaded_summary_en}\\n"
-                f"Received on: {now}\\n\\n"
+                f"We confirm receipt of the following document(s) for your request.\\n\\n"
+                f"REQUEST INFORMATION\\n"
+                f"------------------------------------------------------------\\n"
+                f"Full request reference:\\n{public_request_reference(record)}\\n"
+                f"------------------------------------------------------------\\n"
+                f"Project: {record.get('project_name', '')}\\n\\n"
+                f"DOCUMENT(S) RECEIVED\\n"
+                f"------------------------------------------------------------\\n"
+                f"{uploaded_summary_en}\\n"
+                f"------------------------------------------------------------\\n"
+                f"Received on: {requester_received_at_en}\\n\\n"
                 f"Your documents have been saved in the OV-Chimie platform's Nextcloud space.\\n\\n"
                 f"Best regards,\\nThe OV-Chimie team"
             )
