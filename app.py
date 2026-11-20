@@ -1998,468 +1998,10 @@ def render_admin():
             except Exception as exc:
                 st.error(f"{t('cloud_error')} {exc}")
 
-    st.subheader(t("manage_analysis_types"))
-    is_fr = st.session_state.language == "fr"
-    managed_types = notification_settings.get("analysis_types") or ANALYSIS_TYPES.copy()
-    type_translations = notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN.copy())
-    stored_catalog = notification_settings.get("analysis_catalog", [])
-    catalog_by_type = {
-        normalize_analysis_type_name(item.get("type", "")): item
-        for item in stored_catalog
-        if isinstance(item, dict) and str(item.get("type", "")).strip()
-    }
-    type_translations = {
-        normalize_analysis_type_name(key): value
-        for key, value in type_translations.items()
-    }
-    def numeric_price(value):
-        """Return a JSON-safe numeric price; keep empty cells as None."""
-        if value in (None, ""):
-            return None
-        if isinstance(value, (int, float)):
-            return float(value)
-        # Migrate legacy text prices such as "125,50 €" to numeric values.
-        cleaned = str(value).strip().replace(" ", "").replace(",", ".")
-        cleaned = re.sub(r"[^0-9.\\-]", "", cleaned)
-        try:
-            return float(cleaned) if cleaned else None
-        except ValueError:
-            return None
-
-    type_column = "Type d'analyse" if is_fr else "Analysis type"
-    public_column = "Prix public" if is_fr else "Public price"
-    private_column = "Prix privé" if is_fr else "Private price"
-    inrae_column = "Prix public (IJPB)" if is_fr else "Public price (IJPB)"
-    catalog_rows = []
-    for analysis_type in managed_types:
-        saved = catalog_by_type.get(analysis_type, {})
-        translated_type = type_translations.get(
-            analysis_type, ANALYSIS_TYPES_EN.get(analysis_type, analysis_type)
-        )
-        catalog_rows.append({
-            type_column: analysis_type if is_fr else translated_type,
-            "_canonical_type": analysis_type,
-            public_column: numeric_price(saved.get("public_price")),
-            private_column: numeric_price(saved.get("private_price")),
-            inrae_column: numeric_price(saved.get("inrae_public_price")),
-        })
-
-    st.caption(
-        "Correspondance avec le type de laboratoire : Privée → Prix privé ; Publique → Prix public ; Publique (IJPB) → Prix public (IJPB). "
-        "Saisissez les tarifs unitaires en euros. Les cellules vides correspondent à un tarif non renseigné."
-        if is_fr else
-        "Mapping to laboratory type: Private → Private price; Public → Public price; Public (IJPB) → Public price (IJPB). "
-        "Enter unit prices in euros. Empty cells mean that no price has been set."
-    )
-    edited_catalog = st.data_editor(
-        catalog_rows,
-        key="analysis_tariff_catalog_editor",
-        use_container_width=True,
-        hide_index=True,
-        num_rows="fixed",
-        column_config={
-            type_column: st.column_config.TextColumn(type_column, required=True),
-            "_canonical_type": None,
-            public_column: st.column_config.NumberColumn(
-                "Prix public (€)" if is_fr else "Public price (€)",
-                min_value=0.0, step=0.01, format="%.2f €"
-            ),
-            private_column: st.column_config.NumberColumn(
-                "Prix privé (€)" if is_fr else "Private price (€)",
-                min_value=0.0, step=0.01, format="%.2f €"
-            ),
-            inrae_column: st.column_config.NumberColumn(
-                "Prix public (IJPB) (€)" if is_fr else "Public price (IJPB) (€)",
-                min_value=0.0, step=0.01, format="%.2f €"
-            ),
-        },
-    )
-    col_save, col_add, col_edit, col_delete = st.columns([1.2, 1, 1, 1])
-    with col_save:
-        save_catalog_clicked = st.button(
-            "Enregistrer le tableau" if is_fr else "Save catalog",
-            type="primary", key="save_analysis_tariff_catalog"
-        )
-    with col_add:
-        add_catalog_clicked = st.button(
-            "Ajouter un type" if is_fr else "Add analysis type",
-            key="add_analysis_catalog_type"
-        )
-    with col_edit:
-        edit_catalog_clicked = st.button(
-            "Modifier un nom" if is_fr else "Rename an analysis type",
-            key="edit_analysis_catalog_type"
-        )
-    with col_delete:
-        delete_catalog_clicked = st.button(
-            "Supprimer un type" if is_fr else "Delete analysis type",
-            key="delete_analysis_catalog_type"
-        )
-
-    def edited_catalog_rows():
-        """Return data_editor output as a list of row dictionaries."""
-        if hasattr(edited_catalog, "to_dict"):
-            return edited_catalog.to_dict(orient="records")
-        return [dict(row) for row in edited_catalog]
-
-    def persist_analysis_catalog(rows):
-        cleaned_types = []
-        cleaned_catalog = []
-        cleaned_translations = dict(type_translations)
-        for row in rows:
-            display_label = str(row.get(type_column, "")).strip()
-            canonical_label = display_label if is_fr else str(row.get("_canonical_type", "")).strip()
-            if not canonical_label or not display_label:
-                continue
-            if canonical_label in cleaned_types:
-                raise ValueError("Un type d'analyse est présent plusieurs fois." if is_fr else "An analysis type is duplicated.")
-            cleaned_types.append(canonical_label)
-            cleaned_catalog.append({
-                "type": canonical_label,
-                "public_price": numeric_price(row.get(public_column)),
-                "private_price": numeric_price(row.get(private_column)),
-                "inrae_public_price": numeric_price(row.get(inrae_column)),
-            })
-            if not is_fr:
-                cleaned_translations[canonical_label] = display_label
-            else:
-                cleaned_translations.setdefault(canonical_label, ANALYSIS_TYPES_EN.get(canonical_label, canonical_label))
-        save_notification_settings({
-            "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
-            "admin_cc_email": notification_settings.get("admin_cc_email", ""),
-            "ijpb_admin_email": notification_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"),
-            "analysis_types": cleaned_types,
-            "analysis_type_translations": cleaned_translations,
-            "analysis_catalog": cleaned_catalog,
-        })
-
-    if save_catalog_clicked:
-        try:
-            persist_analysis_catalog(edited_catalog_rows())
-            st.success("Catalogue tarifaire enregistré." if is_fr else "Tariff catalog saved.")
-            st.rerun()
-        except Exception as exc:
-            st.error(f"{t('cloud_error')} {exc}")
-
-    if add_catalog_clicked:
-        st.session_state["show_add_analysis_catalog_type"] = True
-    if st.session_state.get("show_add_analysis_catalog_type", False):
-        st.info(
-            "Important : chaque type d'analyse doit se terminer par une méthode analytique : LC-HRMS, GC-MS ou LC-MS/MS. Choisissez le suffixe ci-dessous ; il sera ajouté automatiquement."
-            if is_fr else
-            "Important: every analysis type must end with an analytical method: LC-HRMS, GC-MS or LC-MS/MS. Select the suffix below; it will be added automatically."
-        )
-        with st.form("new_analysis_catalog_type_form"):
-            new_type = st.text_input("Nom du type d'analyse (sans la méthode à la fin)" if is_fr else "Analysis type name (without the method suffix)")
-            new_type_method = st.selectbox(
-                "Méthode analytique à ajouter à la fin" if is_fr else "Analytical method suffix",
-                options=["LC-HRMS", "GC-MS", "LC-MS/MS"],
-            )
-            new_type_en = st.text_input("Nom anglais (sans la méthode à la fin)" if is_fr else "English name (without the method suffix)")
-            confirm_add_type = st.form_submit_button("Ajouter" if is_fr else "Add")
-        if confirm_add_type:
-            base_candidate = new_type.strip().rstrip(" -")
-            candidate = normalize_analysis_type_name(f"{base_candidate} {new_type_method}") if base_candidate else ""
-            if not candidate:
-                st.warning("Le nom du type est obligatoire." if is_fr else "Analysis type name is required.")
-            elif any(candidate.casefold() == item.casefold() for item in managed_types):
-                st.warning(t("analysis_type_exists"))
-            else:
-                try:
-                    updated_rows = edited_catalog_rows()
-                    updated_rows.append({
-                        type_column: candidate,
-                        "_canonical_type": candidate,
-                        public_column: None,
-                        private_column: None,
-                        inrae_column: None,
-                    })
-                    if new_type_en.strip():
-                        english_base = new_type_en.strip().rstrip(" -")
-                        type_translations[candidate] = f"{english_base} {new_type_method}"
-                    persist_analysis_catalog(updated_rows)
-                    st.session_state.pop("show_add_analysis_catalog_type", None)
-                    st.success("Type d'analyse ajouté." if is_fr else "Analysis type added.")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"{t('cloud_error')} {exc}")
-
-    if edit_catalog_clicked:
-        st.session_state["show_edit_analysis_catalog_type"] = True
-    if st.session_state.get("show_edit_analysis_catalog_type", False) and managed_types:
-        edit_labels = {
-            item: item if is_fr else type_translations.get(item, ANALYSIS_TYPES_EN.get(item, item))
-            for item in managed_types
-        }
-        with st.form("edit_analysis_catalog_type_form"):
-            selected_edit_label = st.selectbox(
-                "Type à modifier" if is_fr else "Analysis type to rename",
-                options=list(edit_labels.values()),
-            )
-            type_to_edit = next((key for key, value in edit_labels.items() if value == selected_edit_label), selected_edit_label)
-            current_english = type_translations.get(type_to_edit, ANALYSIS_TYPES_EN.get(type_to_edit, type_to_edit))
-            renamed_fr = st.text_input("Nouveau nom français" if is_fr else "New French name", value=type_to_edit)
-            renamed_en = st.text_input("Nouveau nom anglais" if is_fr else "New English name", value=current_english)
-            confirm_rename_type = st.form_submit_button("Enregistrer le nouveau nom" if is_fr else "Save new name")
-        if confirm_rename_type:
-            new_canonical = normalize_analysis_type_name(renamed_fr)
-            if not renamed_fr.strip():
-                st.warning("Le nouveau nom est obligatoire." if is_fr else "The new name is required.")
-            elif any(x != type_to_edit and x.casefold() == new_canonical.casefold() for x in managed_types):
-                st.warning(t("analysis_type_exists"))
-            else:
-                try:
-                    rows = edited_catalog_rows()
-                    for row in rows:
-                        row_canonical = str(row.get("_canonical_type", row.get(type_column, ""))).strip()
-                        if row_canonical == type_to_edit:
-                            row["_canonical_type"] = new_canonical
-                            row[type_column] = new_canonical if is_fr else (renamed_en.strip() or new_canonical)
-                    type_translations.pop(type_to_edit, None)
-                    type_translations[new_canonical] = renamed_en.strip() or new_canonical
-                    persist_analysis_catalog(rows)
-                    st.session_state.pop("show_edit_analysis_catalog_type", None)
-                    st.success("Nom du type d'analyse modifié." if is_fr else "Analysis type renamed.")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"{t('cloud_error')} {exc}")
-
-    removable_types = managed_types.copy()
-    if delete_catalog_clicked and removable_types:
-        st.session_state["show_delete_analysis_catalog_type"] = True
-    if st.session_state.get("show_delete_analysis_catalog_type", False) and removable_types:
-        with st.form("delete_analysis_catalog_type_form"):
-            remove_labels = {
-                item: item if is_fr else type_translations.get(item, ANALYSIS_TYPES_EN.get(item, item))
-                for item in removable_types
-            }
-            selected_remove_label = st.selectbox(
-                "Type à supprimer" if is_fr else "Type to delete",
-                options=list(remove_labels.values()),
-            )
-            type_to_remove = next(
-                (canonical for canonical, translated in remove_labels.items()
-                 if translated == selected_remove_label),
-                selected_remove_label,
-            )
-            confirm_delete_type = st.form_submit_button("Confirmer la suppression" if is_fr else "Confirm deletion")
-        if confirm_delete_type:
-            try:
-                remaining_rows = [
-                    row for row in edited_catalog_rows()
-                    if str(row.get("_canonical_type", row.get(type_column, ""))).strip() != type_to_remove
-                ]
-                persist_analysis_catalog(remaining_rows)
-                st.session_state.pop("show_delete_analysis_catalog_type", None)
-                st.success("Type d'analyse supprimé." if is_fr else "Analysis type deleted.")
-                st.rerun()
-            except Exception as exc:
-                st.error(f"{t('cloud_error')} {exc}")
-
-    # Archived requests remain in the same Nextcloud metadata file; only their
-    # archived flag changes. This preserves existing records and compatibility.
+    # Request management is intentionally displayed before analysis-type settings.
     active_records = [r for r in records if not r.get("archived", False)]
     archived_records = [r for r in records if r.get("archived", False)]
-
-    st.subheader("Recettes annuelles indicatives" if st.session_state.language == "fr" else "Indicative annual revenue")
-    st.warning(
-        "⚠️ ESTIMATION INDICATIVE UNIQUEMENT — Les montants sont calculés à partir du catalogue tarifaire actuel. Ils ne représentent pas nécessairement les sommes réellement facturées ou encaissées."
-        if st.session_state.language == "fr" else
-        "⚠️ INDICATIVE ESTIMATE ONLY — Amounts are calculated using the current price catalog. They do not necessarily represent amounts actually invoiced or received."
-    )
-    st.caption(
-        "Cumul de toutes les demandes acceptées, actives et archivées."
-        if st.session_state.language == "fr" else
-        "Total of all accepted requests, active and archived."
-    )
-    catalog_prices = {
-        normalize_analysis_type_name(item.get("type", "")): item
-        for item in notification_settings.get("analysis_catalog", [])
-        if isinstance(item, dict) and str(item.get("type", "")).strip()
-    }
-    # Keep stored laboratory categories unchanged for compatibility with existing requests.
-    # IJPB revenue is split according to the request's funding checkbox.
-    revenue_categories = (
-        "Privée",
-        "Public",
-        "Public (IJPB) - funded",
-        "Public (IJPB) - not funded",
-    )
-    revenue_labels = {
-        "Privée": "Privée" if is_fr else "Private",
-        "Public": "Publique" if is_fr else "Public",
-        "Public (IJPB) - funded": (
-            "Publique (IJPB) — projet financé" if is_fr else "Public (IJPB) — funded project"
-        ),
-        "Public (IJPB) - not funded": (
-            "Publique (IJPB) — projet non financé" if is_fr else "Public (IJPB) — non-funded project"
-        ),
-    }
-    annual_revenue = {}
-    annual_request_counts = {}
-    missing_price_count = 0
-    for item in records:
-        if item.get("deleted", False) or item.get("status") != "accepted":
-            continue
-        decision_date = str(item.get("decision_at", "") or item.get("submitted_at", ""))
-        year = decision_date[:4]
-        if not year.isdigit():
-            continue
-        analysis_items = item.get("analysis_items") or [{
-            "analysis_type": item.get("analysis_type", ""),
-            "analysis_mode": item.get("analysis_mode", ""),
-            "sample_count": item.get("sample_count", 1),
-        }]
-        lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
-        lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(lab_type, lab_type)
-        price_key = {"Privée": "private_price", "Public": "public_price", "Public (IJPB)": "inrae_public_price"}.get(lab_type)
-        revenue_category = lab_type
-        if lab_type == "Public (IJPB)":
-            funding_value = str(item.get("funding", "NO") or "NO").strip().upper()
-            revenue_category = "Public (IJPB) - funded" if funding_value in ("YES", "OUI", "TRUE", "1") else "Public (IJPB) - not funded"
-        year_totals = annual_revenue.setdefault(year, {category: 0.0 for category in revenue_categories})
-        for analysis in analysis_items:
-            price_record = catalog_prices.get(normalize_analysis_type_name(str(analysis.get("analysis_type", ""))), {})
-            raw_price = price_record.get(price_key) if price_key else None
-            try:
-                unit_price = float(str(raw_price).replace(",", ".")) if raw_price not in (None, "") else None
-                sample_count = max(1, int(analysis.get("sample_count", 1) or 1))
-            except (TypeError, ValueError):
-                unit_price, sample_count = None, 1
-            multiplier = 2 if str(analysis.get("analysis_mode", "")) in ("Split/Splitless", "ESI+/-") else 1
-            if unit_price is None:
-                missing_price_count += 1
-                continue
-            year_totals[revenue_category] += unit_price * sample_count * multiplier
-        annual_request_counts[year] = annual_request_counts.get(year, 0) + 1
-
-    if annual_revenue:
-        import pandas as pd
-        year_col = "Année" if is_fr else "Year"
-        total_col = "Total indicatif (€)" if is_fr else "Indicative total (€)"
-        category_cols = {category: f"{revenue_labels[category]} (€)" for category in revenue_categories}
-        revenue_frame = pd.DataFrame([
-            {
-                year_col: year,
-                **{category_cols[category]: round(amounts[category], 2) for category in revenue_categories},
-                total_col: round(sum(amounts.values()), 2),
-            }
-            for year, amounts in sorted(annual_revenue.items())
-        ])
-        st.bar_chart(revenue_frame.set_index(year_col)[list(category_cols.values())])
-        st.dataframe(revenue_frame, use_container_width=True, hide_index=True)
-        category_totals = {
-            category: sum(amounts[category] for amounts in annual_revenue.values())
-            for category in revenue_categories
-        }
-        category_metrics = st.columns(4)
-        for column, category in zip(category_metrics, revenue_categories):
-            column.metric(
-                revenue_labels[category],
-                f"{category_totals[category]:,.2f} €".replace(",", " "),
-            )
-        total_estimated = sum(category_totals.values())
-        st.metric(
-            "Total indicatif cumulé" if is_fr else "Cumulative indicative total",
-            f"{total_estimated:,.2f} €".replace(",", " ")
-        )
-        count_label = "Demandes acceptées comptabilisées" if is_fr else "Accepted requests included"
-        st.caption(f"{count_label} : {sum(annual_request_counts.values())}")
-    else:
-        st.info("Aucune demande acceptée avec un tarif renseigné et une année d'acceptation identifiable." if is_fr else "No accepted requests with a catalog price and identifiable acceptance year.")
-    if missing_price_count:
-        st.warning(
-            f"{missing_price_count} demande(s) acceptée(s) exclue(s) du calcul car aucun tarif correspondant n'est renseigné."
-            if is_fr else
-            f"{missing_price_count} accepted request(s) excluded because no matching catalog price is configured."
-        )
-
-    # Confirmed purchase-order amounts: include every non-deleted request
-    # Cumulative invoiced amounts are based on invoices uploaded by the administrator
-    # and the actual amount entered from each invoice.
-    st.subheader("Montants cumulés mis en facturation" if is_fr else "Cumulative amounts invoiced")
-    st.caption(
-        "Cumul des montants réellement facturés, saisis à partir des factures importées, pour les demandes actives et archivées."
-        if is_fr else
-        "Total of actual invoiced amounts entered from uploaded invoices, across active and archived requests."
-    )
-    annual_invoices = {}
-    invoice_counts = {}
-    missing_invoice_date_count = 0
-    for item in records:
-        if item.get("deleted", False):
-            continue
-        raw_amount = item.get("invoice_amount")
-        if raw_amount in (None, "") or not item.get("invoice_path"):
-            continue
-        try:
-            amount = float(str(raw_amount).replace(" ", "").replace(",", "."))
-        except (TypeError, ValueError):
-            continue
-        if amount <= 0:
-            continue
-        invoice_date = str(item.get("invoice_updated_at", "") or "")
-        invoice_year = invoice_date[:4]
-        if not invoice_year.isdigit():
-            missing_invoice_date_count += 1
-            continue
-        lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
-        lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(lab_type, lab_type)
-        category = lab_type
-        if lab_type == "Public (IJPB)":
-            funding = str(item.get("funding", "NO") or "NO").strip().upper()
-            category = "Public (IJPB) - funded" if funding in ("YES", "OUI", "TRUE", "1") else "Public (IJPB) - not funded"
-        if category not in revenue_categories:
-            category = "Public"
-        yearly_totals = annual_invoices.setdefault(invoice_year, {item_category: 0.0 for item_category in revenue_categories})
-        yearly_totals[category] += amount
-        invoice_counts[invoice_year] = invoice_counts.get(invoice_year, 0) + 1
-
-    if annual_invoices:
-        import pandas as pd
-        invoice_year_col = "Année" if is_fr else "Year"
-        invoice_total_col = "Total mis en facturation (€)" if is_fr else "Total invoiced (€)"
-        invoice_category_cols = {category: f"{revenue_labels[category]} (€)" for category in revenue_categories}
-        invoice_frame = pd.DataFrame([
-            {
-                invoice_year_col: year,
-                **{invoice_category_cols[category]: round(amounts[category], 2) for category in revenue_categories},
-                invoice_total_col: round(sum(amounts.values()), 2),
-            }
-            for year, amounts in sorted(annual_invoices.items())
-        ])
-        st.bar_chart(invoice_frame.set_index(invoice_year_col)[list(invoice_category_cols.values())])
-        st.dataframe(invoice_frame, use_container_width=True, hide_index=True)
-        invoice_category_totals = {
-            category: sum(amounts[category] for amounts in annual_invoices.values())
-            for category in revenue_categories
-        }
-        invoice_metrics = st.columns(4)
-        for column, category in zip(invoice_metrics, revenue_categories):
-            column.metric(
-                revenue_labels[category],
-                f"{invoice_category_totals[category]:,.2f} €".replace(",", " "),
-            )
-        invoice_total = sum(invoice_category_totals.values())
-        st.metric(
-            "Total cumulé mis en facturation" if is_fr else "Cumulative invoiced total",
-            f"{invoice_total:,.2f} €".replace(",", " "),
-        )
-        invoice_count_label = "Factures comptabilisées" if is_fr else "Invoices included"
-        st.caption(f"{invoice_count_label} : {sum(invoice_counts.values())}")
-    else:
-        st.info(
-            "Aucune facture importée avec un montant réel facturé et une année identifiable."
-            if is_fr else
-            "No uploaded invoices with an actual invoiced amount and identifiable year."
-        )
-    if missing_invoice_date_count:
-        st.warning(
-            f"{missing_invoice_date_count} facture(s) exclue(s) car aucune année identifiable."
-            if is_fr else
-            f"{missing_invoice_date_count} invoice(s) excluded because no year could be identified."
-        )
-
+    st.subheader("Gestion des demandes" if st.session_state.language == "fr" else "Request management")
     active_tab, archive_tab = st.tabs([
         "📋 Demandes actives" if st.session_state.language == "fr" else "📋 Active requests",
         "🗄️ Archives" if st.session_state.language == "fr" else "🗄️ Archive",
@@ -3008,6 +2550,96 @@ def render_admin():
                             st.rerun()
     
 
+                with st.expander("Analyse effectuée / Mise en facturation" if st.session_state.language == "fr" else "Analysis completed / Ready for invoicing", expanded=False):
+                    analysis_completed = bool(record.get("analysis_completed", False))
+                    if analysis_completed:
+                        completed_at = str(record.get("analysis_completed_at", "") or "")
+                        st.success(
+                            ("Analyse effectuée — facturation à réaliser. " if st.session_state.language == "fr" else "Analysis completed — ready for invoicing. ")
+                            + (f"Date : {completed_at}" if completed_at else "")
+                        )
+                        st.caption(
+                            "Le personnel administratif a été notifié."
+                            if st.session_state.language == "fr"
+                            else "Administrative staff has been notified."
+                        )
+                    else:
+                        st.info(
+                            "Lorsque l'analyse est terminée, cliquez sur le bouton ci-dessous. Le personnel administratif sera informé que le dossier peut passer à la facturation."
+                            if st.session_state.language == "fr"
+                            else "When the analysis is complete, click the button below. Administrative staff will be notified that the request can proceed to invoicing."
+                        )
+                    mark_analysis_completed = st.button(
+                        "Confirmer que l'analyse est effectuée et notifier le personnel administratif"
+                        if st.session_state.language == "fr"
+                        else "Confirm analysis completion and notify administrative staff",
+                        key=f"analysis_completed_{selected_id}",
+                        disabled=analysis_completed,
+                        type="primary",
+                    )
+                    if mark_analysis_completed and not analysis_completed:
+                        try:
+                            notification_settings = load_notification_settings()
+                            administrative_email = str(notification_settings.get("ijpb_admin_email", "") or "").strip()
+                            if not administrative_email:
+                                raise RuntimeError(
+                                    "L'adresse du personnel administratif IJPB n'est pas renseignée dans les paramètres de notification."
+                                    if st.session_state.language == "fr"
+                                    else "The IJPB administrative staff email is not configured in notification settings."
+                                )
+                            completed_at = datetime.now().astimezone().isoformat(timespec="seconds")
+                            completed_display = datetime.fromisoformat(completed_at).strftime("%d/%m/%Y à %H:%M:%S")
+                            if st.session_state.language == "fr":
+                                completion_subject = f"Analyse effectuée – Dossier prêt pour facturation – {public_request_reference(record)}"
+                                completion_body = (
+                                    "Bonjour,\n\n"
+                                    "L'analyse correspondant à la demande suivante est terminée. Le dossier peut désormais passer à l'étape de facturation.\n\n"
+                                    "INFORMATIONS SUR LA DEMANDE\n"
+                                    "------------------------------------------------------------\n"
+                                    f"Référence complète : {public_request_reference(record)}\n"
+                                    f"Projet : {record.get('project_name', '') or 'Non renseigné'}\n"
+                                    f"Demandeur : {record.get('project_manager', '') or 'Non renseigné'}\n"
+                                    f"Adresse e-mail : {record.get('manager_email', '') or 'Non renseignée'}\n"
+                                    f"Opérateur : {record.get('assigned_operator', '') or 'Non renseigné'}\n"
+                                    "------------------------------------------------------------\n"
+                                    f"Date de fin d'analyse : {completed_display}\n\n"
+                                    "Action attendue : procéder à la facturation du dossier.\n\n"
+                                    "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
+                                )
+                            else:
+                                completion_subject = f"Analysis completed – Request ready for invoicing – {public_request_reference(record)}"
+                                completion_body = (
+                                    "Hello,\n\n"
+                                    "The analysis for the following request is complete. The file can now proceed to invoicing.\n\n"
+                                    "REQUEST INFORMATION\n"
+                                    "------------------------------------------------------------\n"
+                                    f"Full request reference: {public_request_reference(record)}\n"
+                                    f"Project: {record.get('project_name', '') or 'Not specified'}\n"
+                                    f"Requester: {record.get('project_manager', '') or 'Not specified'}\n"
+                                    f"Email address: {record.get('manager_email', '') or 'Not specified'}\n"
+                                    f"Operator: {record.get('assigned_operator', '') or 'Not specified'}\n"
+                                    "------------------------------------------------------------\n"
+                                    f"Analysis completion date: {completed_display}\n\n"
+                                    "Action required: proceed with invoicing.\n\n"
+                                    "Best regards,\nOV-Chimie-Metabolisme Platform"
+                                )
+                            send_email(administrative_email, completion_subject, completion_body)
+                            record["analysis_completed"] = True
+                            record["analysis_completed_at"] = completed_at
+                            record["analysis_completion_notified_to"] = administrative_email
+                            save_metadata(records)
+                            st.success(
+                                "Le personnel administratif a été notifié. Le dossier est prêt pour la facturation."
+                                if st.session_state.language == "fr"
+                                else "Administrative staff has been notified. The request is ready for invoicing."
+                            )
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(
+                                ("Impossible de confirmer la fin d'analyse ou d'envoyer la notification : " if st.session_state.language == "fr" else "Could not confirm analysis completion or send the notification: ")
+                                + str(exc)
+                            )
+
                 with st.expander("Gestion partie administrative" if st.session_state.language == "fr" else "Administrative management", expanded=False):
                     # Unsigned quotation: save to Nextcloud, then notify the requester with the quote attached.
                     unsigned_quote_label = "Devis non signé" if st.session_state.language == "fr" else "Unsigned quotation"
@@ -3359,6 +2991,465 @@ def render_admin():
                                 else f"Deletion failed: {exc}"
                             )
     
+
+    st.subheader(t("manage_analysis_types"))
+    is_fr = st.session_state.language == "fr"
+    managed_types = notification_settings.get("analysis_types") or ANALYSIS_TYPES.copy()
+    type_translations = notification_settings.get("analysis_type_translations", ANALYSIS_TYPES_EN.copy())
+    stored_catalog = notification_settings.get("analysis_catalog", [])
+    catalog_by_type = {
+        normalize_analysis_type_name(item.get("type", "")): item
+        for item in stored_catalog
+        if isinstance(item, dict) and str(item.get("type", "")).strip()
+    }
+    type_translations = {
+        normalize_analysis_type_name(key): value
+        for key, value in type_translations.items()
+    }
+    def numeric_price(value):
+        """Return a JSON-safe numeric price; keep empty cells as None."""
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        # Migrate legacy text prices such as "125,50 €" to numeric values.
+        cleaned = str(value).strip().replace(" ", "").replace(",", ".")
+        cleaned = re.sub(r"[^0-9.\\-]", "", cleaned)
+        try:
+            return float(cleaned) if cleaned else None
+        except ValueError:
+            return None
+
+    type_column = "Type d'analyse" if is_fr else "Analysis type"
+    public_column = "Prix public" if is_fr else "Public price"
+    private_column = "Prix privé" if is_fr else "Private price"
+    inrae_column = "Prix public (IJPB)" if is_fr else "Public price (IJPB)"
+    catalog_rows = []
+    for analysis_type in managed_types:
+        saved = catalog_by_type.get(analysis_type, {})
+        translated_type = type_translations.get(
+            analysis_type, ANALYSIS_TYPES_EN.get(analysis_type, analysis_type)
+        )
+        catalog_rows.append({
+            type_column: analysis_type if is_fr else translated_type,
+            "_canonical_type": analysis_type,
+            public_column: numeric_price(saved.get("public_price")),
+            private_column: numeric_price(saved.get("private_price")),
+            inrae_column: numeric_price(saved.get("inrae_public_price")),
+        })
+
+    st.caption(
+        "Correspondance avec le type de laboratoire : Privée → Prix privé ; Publique → Prix public ; Publique (IJPB) → Prix public (IJPB). "
+        "Saisissez les tarifs unitaires en euros. Les cellules vides correspondent à un tarif non renseigné."
+        if is_fr else
+        "Mapping to laboratory type: Private → Private price; Public → Public price; Public (IJPB) → Public price (IJPB). "
+        "Enter unit prices in euros. Empty cells mean that no price has been set."
+    )
+    edited_catalog = st.data_editor(
+        catalog_rows,
+        key="analysis_tariff_catalog_editor",
+        use_container_width=True,
+        hide_index=True,
+        num_rows="fixed",
+        column_config={
+            type_column: st.column_config.TextColumn(type_column, required=True),
+            "_canonical_type": None,
+            public_column: st.column_config.NumberColumn(
+                "Prix public (€)" if is_fr else "Public price (€)",
+                min_value=0.0, step=0.01, format="%.2f €"
+            ),
+            private_column: st.column_config.NumberColumn(
+                "Prix privé (€)" if is_fr else "Private price (€)",
+                min_value=0.0, step=0.01, format="%.2f €"
+            ),
+            inrae_column: st.column_config.NumberColumn(
+                "Prix public (IJPB) (€)" if is_fr else "Public price (IJPB) (€)",
+                min_value=0.0, step=0.01, format="%.2f €"
+            ),
+        },
+    )
+    col_save, col_add, col_edit, col_delete = st.columns([1.2, 1, 1, 1])
+    with col_save:
+        save_catalog_clicked = st.button(
+            "Enregistrer le tableau" if is_fr else "Save catalog",
+            type="primary", key="save_analysis_tariff_catalog"
+        )
+    with col_add:
+        add_catalog_clicked = st.button(
+            "Ajouter un type" if is_fr else "Add analysis type",
+            key="add_analysis_catalog_type"
+        )
+    with col_edit:
+        edit_catalog_clicked = st.button(
+            "Modifier un nom" if is_fr else "Rename an analysis type",
+            key="edit_analysis_catalog_type"
+        )
+    with col_delete:
+        delete_catalog_clicked = st.button(
+            "Supprimer un type" if is_fr else "Delete analysis type",
+            key="delete_analysis_catalog_type"
+        )
+
+    def edited_catalog_rows():
+        """Return data_editor output as a list of row dictionaries."""
+        if hasattr(edited_catalog, "to_dict"):
+            return edited_catalog.to_dict(orient="records")
+        return [dict(row) for row in edited_catalog]
+
+    def persist_analysis_catalog(rows):
+        cleaned_types = []
+        cleaned_catalog = []
+        cleaned_translations = dict(type_translations)
+        for row in rows:
+            display_label = str(row.get(type_column, "")).strip()
+            canonical_label = display_label if is_fr else str(row.get("_canonical_type", "")).strip()
+            if not canonical_label or not display_label:
+                continue
+            if canonical_label in cleaned_types:
+                raise ValueError("Un type d'analyse est présent plusieurs fois." if is_fr else "An analysis type is duplicated.")
+            cleaned_types.append(canonical_label)
+            cleaned_catalog.append({
+                "type": canonical_label,
+                "public_price": numeric_price(row.get(public_column)),
+                "private_price": numeric_price(row.get(private_column)),
+                "inrae_public_price": numeric_price(row.get(inrae_column)),
+            })
+            if not is_fr:
+                cleaned_translations[canonical_label] = display_label
+            else:
+                cleaned_translations.setdefault(canonical_label, ANALYSIS_TYPES_EN.get(canonical_label, canonical_label))
+        save_notification_settings({
+            "admin_email": notification_settings.get("admin_email", DEFAULT_ADMIN_EMAIL),
+            "admin_cc_email": notification_settings.get("admin_cc_email", ""),
+            "ijpb_admin_email": notification_settings.get("ijpb_admin_email", "stephanie.zimmermann@inrae.fr"),
+            "analysis_types": cleaned_types,
+            "analysis_type_translations": cleaned_translations,
+            "analysis_catalog": cleaned_catalog,
+        })
+
+    if save_catalog_clicked:
+        try:
+            persist_analysis_catalog(edited_catalog_rows())
+            st.success("Catalogue tarifaire enregistré." if is_fr else "Tariff catalog saved.")
+            st.rerun()
+        except Exception as exc:
+            st.error(f"{t('cloud_error')} {exc}")
+
+    if add_catalog_clicked:
+        st.session_state["show_add_analysis_catalog_type"] = True
+    if st.session_state.get("show_add_analysis_catalog_type", False):
+        st.info(
+            "Important : chaque type d'analyse doit se terminer par une méthode analytique : LC-HRMS, GC-MS ou LC-MS/MS. Choisissez le suffixe ci-dessous ; il sera ajouté automatiquement."
+            if is_fr else
+            "Important: every analysis type must end with an analytical method: LC-HRMS, GC-MS or LC-MS/MS. Select the suffix below; it will be added automatically."
+        )
+        with st.form("new_analysis_catalog_type_form"):
+            new_type = st.text_input("Nom du type d'analyse (sans la méthode à la fin)" if is_fr else "Analysis type name (without the method suffix)")
+            new_type_method = st.selectbox(
+                "Méthode analytique à ajouter à la fin" if is_fr else "Analytical method suffix",
+                options=["LC-HRMS", "GC-MS", "LC-MS/MS"],
+            )
+            new_type_en = st.text_input("Nom anglais (sans la méthode à la fin)" if is_fr else "English name (without the method suffix)")
+            confirm_add_type = st.form_submit_button("Ajouter" if is_fr else "Add")
+        if confirm_add_type:
+            base_candidate = new_type.strip().rstrip(" -")
+            candidate = normalize_analysis_type_name(f"{base_candidate} {new_type_method}") if base_candidate else ""
+            if not candidate:
+                st.warning("Le nom du type est obligatoire." if is_fr else "Analysis type name is required.")
+            elif any(candidate.casefold() == item.casefold() for item in managed_types):
+                st.warning(t("analysis_type_exists"))
+            else:
+                try:
+                    updated_rows = edited_catalog_rows()
+                    updated_rows.append({
+                        type_column: candidate,
+                        "_canonical_type": candidate,
+                        public_column: None,
+                        private_column: None,
+                        inrae_column: None,
+                    })
+                    if new_type_en.strip():
+                        english_base = new_type_en.strip().rstrip(" -")
+                        type_translations[candidate] = f"{english_base} {new_type_method}"
+                    persist_analysis_catalog(updated_rows)
+                    st.session_state.pop("show_add_analysis_catalog_type", None)
+                    st.success("Type d'analyse ajouté." if is_fr else "Analysis type added.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"{t('cloud_error')} {exc}")
+
+    if edit_catalog_clicked:
+        st.session_state["show_edit_analysis_catalog_type"] = True
+    if st.session_state.get("show_edit_analysis_catalog_type", False) and managed_types:
+        edit_labels = {
+            item: item if is_fr else type_translations.get(item, ANALYSIS_TYPES_EN.get(item, item))
+            for item in managed_types
+        }
+        with st.form("edit_analysis_catalog_type_form"):
+            selected_edit_label = st.selectbox(
+                "Type à modifier" if is_fr else "Analysis type to rename",
+                options=list(edit_labels.values()),
+            )
+            type_to_edit = next((key for key, value in edit_labels.items() if value == selected_edit_label), selected_edit_label)
+            current_english = type_translations.get(type_to_edit, ANALYSIS_TYPES_EN.get(type_to_edit, type_to_edit))
+            renamed_fr = st.text_input("Nouveau nom français" if is_fr else "New French name", value=type_to_edit)
+            renamed_en = st.text_input("Nouveau nom anglais" if is_fr else "New English name", value=current_english)
+            confirm_rename_type = st.form_submit_button("Enregistrer le nouveau nom" if is_fr else "Save new name")
+        if confirm_rename_type:
+            new_canonical = normalize_analysis_type_name(renamed_fr)
+            if not renamed_fr.strip():
+                st.warning("Le nouveau nom est obligatoire." if is_fr else "The new name is required.")
+            elif any(x != type_to_edit and x.casefold() == new_canonical.casefold() for x in managed_types):
+                st.warning(t("analysis_type_exists"))
+            else:
+                try:
+                    rows = edited_catalog_rows()
+                    for row in rows:
+                        row_canonical = str(row.get("_canonical_type", row.get(type_column, ""))).strip()
+                        if row_canonical == type_to_edit:
+                            row["_canonical_type"] = new_canonical
+                            row[type_column] = new_canonical if is_fr else (renamed_en.strip() or new_canonical)
+                    type_translations.pop(type_to_edit, None)
+                    type_translations[new_canonical] = renamed_en.strip() or new_canonical
+                    persist_analysis_catalog(rows)
+                    st.session_state.pop("show_edit_analysis_catalog_type", None)
+                    st.success("Nom du type d'analyse modifié." if is_fr else "Analysis type renamed.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"{t('cloud_error')} {exc}")
+
+    removable_types = managed_types.copy()
+    if delete_catalog_clicked and removable_types:
+        st.session_state["show_delete_analysis_catalog_type"] = True
+    if st.session_state.get("show_delete_analysis_catalog_type", False) and removable_types:
+        with st.form("delete_analysis_catalog_type_form"):
+            remove_labels = {
+                item: item if is_fr else type_translations.get(item, ANALYSIS_TYPES_EN.get(item, item))
+                for item in removable_types
+            }
+            selected_remove_label = st.selectbox(
+                "Type à supprimer" if is_fr else "Type to delete",
+                options=list(remove_labels.values()),
+            )
+            type_to_remove = next(
+                (canonical for canonical, translated in remove_labels.items()
+                 if translated == selected_remove_label),
+                selected_remove_label,
+            )
+            confirm_delete_type = st.form_submit_button("Confirmer la suppression" if is_fr else "Confirm deletion")
+        if confirm_delete_type:
+            try:
+                remaining_rows = [
+                    row for row in edited_catalog_rows()
+                    if str(row.get("_canonical_type", row.get(type_column, ""))).strip() != type_to_remove
+                ]
+                persist_analysis_catalog(remaining_rows)
+                st.session_state.pop("show_delete_analysis_catalog_type", None)
+                st.success("Type d'analyse supprimé." if is_fr else "Analysis type deleted.")
+                st.rerun()
+            except Exception as exc:
+                st.error(f"{t('cloud_error')} {exc}")
+
+    st.subheader("Recettes annuelles indicatives" if st.session_state.language == "fr" else "Indicative annual revenue")
+    st.warning(
+        "⚠️ ESTIMATION INDICATIVE UNIQUEMENT — Les montants sont calculés à partir du catalogue tarifaire actuel. Ils ne représentent pas nécessairement les sommes réellement facturées ou encaissées."
+        if st.session_state.language == "fr" else
+        "⚠️ INDICATIVE ESTIMATE ONLY — Amounts are calculated using the current price catalog. They do not necessarily represent amounts actually invoiced or received."
+    )
+    st.caption(
+        "Cumul de toutes les demandes acceptées, actives et archivées."
+        if st.session_state.language == "fr" else
+        "Total of all accepted requests, active and archived."
+    )
+    catalog_prices = {
+        normalize_analysis_type_name(item.get("type", "")): item
+        for item in notification_settings.get("analysis_catalog", [])
+        if isinstance(item, dict) and str(item.get("type", "")).strip()
+    }
+    # Keep stored laboratory categories unchanged for compatibility with existing requests.
+    # IJPB revenue is split according to the request's funding checkbox.
+    revenue_categories = (
+        "Privée",
+        "Public",
+        "Public (IJPB) - funded",
+        "Public (IJPB) - not funded",
+    )
+    revenue_labels = {
+        "Privée": "Privée" if is_fr else "Private",
+        "Public": "Publique" if is_fr else "Public",
+        "Public (IJPB) - funded": (
+            "Publique (IJPB) — projet financé" if is_fr else "Public (IJPB) — funded project"
+        ),
+        "Public (IJPB) - not funded": (
+            "Publique (IJPB) — projet non financé" if is_fr else "Public (IJPB) — non-funded project"
+        ),
+    }
+    annual_revenue = {}
+    annual_request_counts = {}
+    missing_price_count = 0
+    for item in records:
+        if item.get("deleted", False) or item.get("status") != "accepted":
+            continue
+        decision_date = str(item.get("decision_at", "") or item.get("submitted_at", ""))
+        year = decision_date[:4]
+        if not year.isdigit():
+            continue
+        analysis_items = item.get("analysis_items") or [{
+            "analysis_type": item.get("analysis_type", ""),
+            "analysis_mode": item.get("analysis_mode", ""),
+            "sample_count": item.get("sample_count", 1),
+        }]
+        lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
+        lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(lab_type, lab_type)
+        price_key = {"Privée": "private_price", "Public": "public_price", "Public (IJPB)": "inrae_public_price"}.get(lab_type)
+        revenue_category = lab_type
+        if lab_type == "Public (IJPB)":
+            funding_value = str(item.get("funding", "NO") or "NO").strip().upper()
+            revenue_category = "Public (IJPB) - funded" if funding_value in ("YES", "OUI", "TRUE", "1") else "Public (IJPB) - not funded"
+        year_totals = annual_revenue.setdefault(year, {category: 0.0 for category in revenue_categories})
+        for analysis in analysis_items:
+            price_record = catalog_prices.get(normalize_analysis_type_name(str(analysis.get("analysis_type", ""))), {})
+            raw_price = price_record.get(price_key) if price_key else None
+            try:
+                unit_price = float(str(raw_price).replace(",", ".")) if raw_price not in (None, "") else None
+                sample_count = max(1, int(analysis.get("sample_count", 1) or 1))
+            except (TypeError, ValueError):
+                unit_price, sample_count = None, 1
+            multiplier = 2 if str(analysis.get("analysis_mode", "")) in ("Split/Splitless", "ESI+/-") else 1
+            if unit_price is None:
+                missing_price_count += 1
+                continue
+            year_totals[revenue_category] += unit_price * sample_count * multiplier
+        annual_request_counts[year] = annual_request_counts.get(year, 0) + 1
+
+    if annual_revenue:
+        import pandas as pd
+        year_col = "Année" if is_fr else "Year"
+        total_col = "Total indicatif (€)" if is_fr else "Indicative total (€)"
+        category_cols = {category: f"{revenue_labels[category]} (€)" for category in revenue_categories}
+        revenue_frame = pd.DataFrame([
+            {
+                year_col: year,
+                **{category_cols[category]: round(amounts[category], 2) for category in revenue_categories},
+                total_col: round(sum(amounts.values()), 2),
+            }
+            for year, amounts in sorted(annual_revenue.items())
+        ])
+        st.bar_chart(revenue_frame.set_index(year_col)[list(category_cols.values())])
+        st.dataframe(revenue_frame, use_container_width=True, hide_index=True)
+        category_totals = {
+            category: sum(amounts[category] for amounts in annual_revenue.values())
+            for category in revenue_categories
+        }
+        category_metrics = st.columns(4)
+        for column, category in zip(category_metrics, revenue_categories):
+            column.metric(
+                revenue_labels[category],
+                f"{category_totals[category]:,.2f} €".replace(",", " "),
+            )
+        total_estimated = sum(category_totals.values())
+        st.metric(
+            "Total indicatif cumulé" if is_fr else "Cumulative indicative total",
+            f"{total_estimated:,.2f} €".replace(",", " ")
+        )
+        count_label = "Demandes acceptées comptabilisées" if is_fr else "Accepted requests included"
+        st.caption(f"{count_label} : {sum(annual_request_counts.values())}")
+    else:
+        st.info("Aucune demande acceptée avec un tarif renseigné et une année d'acceptation identifiable." if is_fr else "No accepted requests with a catalog price and identifiable acceptance year.")
+    if missing_price_count:
+        st.warning(
+            f"{missing_price_count} demande(s) acceptée(s) exclue(s) du calcul car aucun tarif correspondant n'est renseigné."
+            if is_fr else
+            f"{missing_price_count} accepted request(s) excluded because no matching catalog price is configured."
+        )
+
+    # Confirmed purchase-order amounts: include every non-deleted request
+    # Cumulative invoiced amounts are based on invoices uploaded by the administrator
+    # and the actual amount entered from each invoice.
+    st.subheader("Montants cumulés mis en facturation" if is_fr else "Cumulative amounts invoiced")
+    st.caption(
+        "Cumul des montants réellement facturés, saisis à partir des factures importées, pour les demandes actives et archivées."
+        if is_fr else
+        "Total of actual invoiced amounts entered from uploaded invoices, across active and archived requests."
+    )
+    annual_invoices = {}
+    invoice_counts = {}
+    missing_invoice_date_count = 0
+    for item in records:
+        if item.get("deleted", False):
+            continue
+        raw_amount = item.get("invoice_amount")
+        if raw_amount in (None, "") or not item.get("invoice_path"):
+            continue
+        try:
+            amount = float(str(raw_amount).replace(" ", "").replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if amount <= 0:
+            continue
+        invoice_date = str(item.get("invoice_updated_at", "") or "")
+        invoice_year = invoice_date[:4]
+        if not invoice_year.isdigit():
+            missing_invoice_date_count += 1
+            continue
+        lab_type = str(item.get("visibility", "Public (IJPB)") or "Public (IJPB)")
+        lab_type = {"Publique": "Public", "Publique (IJPB)": "Public (IJPB)"}.get(lab_type, lab_type)
+        category = lab_type
+        if lab_type == "Public (IJPB)":
+            funding = str(item.get("funding", "NO") or "NO").strip().upper()
+            category = "Public (IJPB) - funded" if funding in ("YES", "OUI", "TRUE", "1") else "Public (IJPB) - not funded"
+        if category not in revenue_categories:
+            category = "Public"
+        yearly_totals = annual_invoices.setdefault(invoice_year, {item_category: 0.0 for item_category in revenue_categories})
+        yearly_totals[category] += amount
+        invoice_counts[invoice_year] = invoice_counts.get(invoice_year, 0) + 1
+
+    if annual_invoices:
+        import pandas as pd
+        invoice_year_col = "Année" if is_fr else "Year"
+        invoice_total_col = "Total mis en facturation (€)" if is_fr else "Total invoiced (€)"
+        invoice_category_cols = {category: f"{revenue_labels[category]} (€)" for category in revenue_categories}
+        invoice_frame = pd.DataFrame([
+            {
+                invoice_year_col: year,
+                **{invoice_category_cols[category]: round(amounts[category], 2) for category in revenue_categories},
+                invoice_total_col: round(sum(amounts.values()), 2),
+            }
+            for year, amounts in sorted(annual_invoices.items())
+        ])
+        st.bar_chart(invoice_frame.set_index(invoice_year_col)[list(invoice_category_cols.values())])
+        st.dataframe(invoice_frame, use_container_width=True, hide_index=True)
+        invoice_category_totals = {
+            category: sum(amounts[category] for amounts in annual_invoices.values())
+            for category in revenue_categories
+        }
+        invoice_metrics = st.columns(4)
+        for column, category in zip(invoice_metrics, revenue_categories):
+            column.metric(
+                revenue_labels[category],
+                f"{invoice_category_totals[category]:,.2f} €".replace(",", " "),
+            )
+        invoice_total = sum(invoice_category_totals.values())
+        st.metric(
+            "Total cumulé mis en facturation" if is_fr else "Cumulative invoiced total",
+            f"{invoice_total:,.2f} €".replace(",", " "),
+        )
+        invoice_count_label = "Factures comptabilisées" if is_fr else "Invoices included"
+        st.caption(f"{invoice_count_label} : {sum(invoice_counts.values())}")
+    else:
+        st.info(
+            "Aucune facture importée avec un montant réel facturé et une année identifiable."
+            if is_fr else
+            "No uploaded invoices with an actual invoiced amount and identifiable year."
+        )
+    if missing_invoice_date_count:
+        st.warning(
+            f"{missing_invoice_date_count} facture(s) exclue(s) car aucune année identifiable."
+            if is_fr else
+            f"{missing_invoice_date_count} invoice(s) excluded because no year could be identified."
+        )
+
+
 def render_form():
     if not os.path.isfile(TEMPLATE_PATH):
         st.error(t("template_missing"))
