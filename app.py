@@ -160,7 +160,7 @@ TRANSLATIONS = {
         "admin_primary_email": "E-mail principal de l’administrateur",
         "platform_staff_email": "E-mail du personnel de la plateforme (facultatif)",
         "admin_secondary_email": "E-mail secondaire de l’administrateur (CC, facultatif)",
-        "ijpb_admin_email": "E-mail du personnel administratif de l’IJPB (CC, facultatif)",
+        "ijpb_admin_email": "E-mail du personnel administratif de l’IJPB (destinataire principal des bons de commande)",
         "save_notification_settings": "Enregistrer les adresses e-mail",
         "notification_settings_saved": "Adresses de notification enregistrées dans Nextcloud.",
         "select_request": "Sélectionner une demande", "status": "Décision / statut",
@@ -280,7 +280,7 @@ TRANSLATIONS = {
         "admin_primary_email": "Administrator primary email",
         "platform_staff_email": "Platform staff email (optional)",
         "admin_secondary_email": "Administrator secondary email (CC, optional)",
-        "ijpb_admin_email": "IJPB administrative staff email (CC, optional)",
+        "ijpb_admin_email": "IJPB administrative staff email (primary recipient for purchase-order notifications)",
         "save_notification_settings": "Save email addresses",
         "notification_settings_saved": "Notification addresses saved to Nextcloud.",
         "select_request": "Select a request", "status": "Decision / status",
@@ -4131,19 +4131,25 @@ def render_purchase_order_import():
         record["purchase_order_received"] = True
         save_metadata(records)
 
-        notification_error = None
+        notification_errors = []
+        # Internal notification: IJPB administrative staff is the primary
+        # recipient; OV-Chimie and the assigned operator are copied.
         try:
             settings = load_notification_settings()
-            # Purchase-order notifications must always reach the OV-Chimie mailbox.
-            admin_email = DEFAULT_ADMIN_EMAIL
-            operator_email = str(record.get("assigned_operator_email", "")).strip()
             ijpb_email = str(settings.get("ijpb_admin_email", "")).strip()
-            cc = join_email_recipients(operator_email, ijpb_email)
-            subject = (
+            if not ijpb_email:
+                raise RuntimeError(
+                    "L’adresse e-mail du personnel administratif IJPB doit être renseignée dans les paramètres de notification."
+                    if fr else
+                    "The IJPB administrative staff email must be configured in notification settings."
+                )
+            operator_email = str(record.get("assigned_operator_email", "")).strip()
+            cc = join_email_recipients(DEFAULT_ADMIN_EMAIL, operator_email)
+            internal_subject = (
                 f"Bon de commande reçu – demande {record['id']}"
                 if fr else f"Purchase order received – request {record['id']}"
             )
-            body = (
+            internal_body = (
                 f"Un bon de commande a été importé pour la demande {record['id']}.\n"
                 f"Projet : {record.get('project_name', '')}\n"
                 f"Demandeur : {record.get('project_manager', '')} ({requester_email})\n"
@@ -4155,21 +4161,63 @@ def render_purchase_order_import():
                 f"Operator: {record.get('assigned_operator', '') or 'Not specified'}\n"
                 f"Nextcloud file: {new_path}\nPurchase order status: received"
             )
-            if not admin_email:
-                raise RuntimeError("L'adresse OV-Chimie n'est pas configurée." if fr else "The OV-Chimie email address is not configured.")
-            send_email(admin_email, subject, body, cc=cc, reply_to=requester_email)
+            send_email(ijpb_email, internal_subject, internal_body, cc=cc, reply_to=requester_email)
         except Exception as mail_exc:
-            notification_error = str(mail_exc)
+            notification_errors.append(
+                ("Notification interne : " if fr else "Internal notification: ") + str(mail_exc)
+            )
+
+        # Separate confirmation email to the requester whose address was
+        # validated against the original request above.
+        try:
+            requester_subject = (
+                f"Confirmation de dépôt du bon de commande – demande {record['id']}"
+                if fr else f"Purchase order upload confirmation – request {record['id']}"
+            )
+            requester_body = (
+                f"Bonjour,\n\n"
+                f"Nous vous confirmons la réception de votre bon de commande pour la demande {record['id']}.\n\n"
+                f"Projet : {record.get('project_name', '')}\n"
+                f"Référence de la demande : {record['id']}\n"
+                f"Document reçu : {purchase_order_file.name}\n"
+                f"Date de réception : {now}\n"
+                f"Statut : Bon de commande reçu\n\n"
+                f"Votre document a été enregistré. Cette confirmation concerne uniquement la réception du bon de commande ; elle ne signifie pas que l'analyse a commencé.\n\n"
+                f"Cordialement,\nL’équipe OV-Chimie"
+                if fr else
+                f"Hello,\n\n"
+                f"This email confirms that we have received your purchase order for request {record['id']}.\n\n"
+                f"Project: {record.get('project_name', '')}\n"
+                f"Request reference: {record['id']}\n"
+                f"Document received: {purchase_order_file.name}\n"
+                f"Received on: {now}\n"
+                f"Status: Purchase order received\n\n"
+                f"Your document has been saved. This confirmation only acknowledges receipt of the purchase order; it does not mean that the analysis has started.\n\n"
+                f"Best regards,\nThe OV-Chimie team"
+            )
+            send_email(requester_email, requester_subject, requester_body)
+        except Exception as mail_exc:
+            notification_errors.append(
+                ("Confirmation au demandeur : " if fr else "Requester confirmation: ") + str(mail_exc)
+            )
 
         st.success(
             f"Le bon de commande de la demande {record['id']} a été enregistré dans Nextcloud. Le résumé de la demande a été mis à jour."
             if fr else
             f"The purchase order for request {record['id']} was saved to Nextcloud. The request summary has been updated."
         )
-        if notification_error:
-            st.warning(("Fichier enregistré, mais l’envoi des notifications a échoué : " if fr else "File saved, but notification delivery failed: ") + notification_error)
+        if notification_errors:
+            st.warning(
+                ("Fichier enregistré, mais certaines notifications n’ont pas pu être envoyées :\n- " if fr else
+                 "File saved, but some notifications could not be sent:\n- ")
+                + "\n- ".join(notification_errors)
+            )
         else:
-            st.info("Notifications envoyées à OV-Chimie, à l’opérateur affecté (si renseigné) et au personnel administratif de l’IJPB (si configuré)." if fr else "Notifications sent to OV-Chimie, the assigned operator (if set), and IJPB administrative staff (if configured).")
+            st.info(
+                "Deux notifications ont été envoyées : confirmation au demandeur, et notification au personnel administratif IJPB (À), avec OV-Chimie et l’opérateur affecté (si renseigné) en copie (CC)."
+                if fr else
+                "Two notifications were sent: a confirmation to the requester, and a notification to IJPB administrative staff (To), with OV-Chimie and the assigned operator (if set) copied (CC)."
+            )
     except Exception as exc:
         st.error(("L’importation a échoué : " if fr else "Upload failed: ") + str(exc))
 
