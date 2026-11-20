@@ -12,6 +12,7 @@ import secrets
 import hashlib
 import hmac
 import time
+import mimetypes
 from datetime import date, datetime
 from email.message import EmailMessage
 from io import BytesIO
@@ -765,7 +766,7 @@ def join_email_recipients(*addresses):
                 result.append(item)
     return ", ".join(result) or None
 
-def send_email(to_address, subject, body, cc=None, reply_to=None):
+def send_email(to_address, subject, body, cc=None, reply_to=None, attachments=None):
     cfg = get_secret("smtp", {})
     if not cfg or not all(cfg.get(k) for k in ("host", "username", "password", "sender")):
         raise RuntimeError(t("smtp_not_configured"))
@@ -778,6 +779,18 @@ def send_email(to_address, subject, body, cc=None, reply_to=None):
     if reply_to:
         message["Reply-To"] = reply_to
     message.set_content(body)
+    for attachment in attachments or []:
+        filename, file_bytes, content_type = attachment
+        guessed_type = content_type or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        maintype, _, subtype = guessed_type.partition("/")
+        if not subtype:
+            maintype, subtype = "application", "octet-stream"
+        message.add_attachment(
+            file_bytes,
+            maintype=maintype,
+            subtype=subtype,
+            filename=filename,
+        )
     with smtplib.SMTP(cfg["host"], int(cfg.get("port", 587)), timeout=25) as server:
         server.starttls(context=ssl.create_default_context())
         server.login(cfg["username"], cfg["password"])
@@ -2831,10 +2844,10 @@ def render_admin():
                             except Exception as exc: st.error(str(exc))
                 except Exception as exc: st.warning(str(exc))
     
-                # Unsigned quotation: stored in its own folder, always prefixed with the request reference.
+                # Unsigned quotation: save to Nextcloud, then notify the requester with the quote attached.
                 unsigned_quote_label = "Devis non signé" if st.session_state.language == "fr" else "Unsigned quotation"
                 unsigned_upload_label = "Importer le devis non signé (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload unsigned quotation (PDF, DOC or DOCX)"
-                unsigned_save_label = "Enregistrer le devis non signé" if st.session_state.language == "fr" else "Save unsigned quotation"
+                unsigned_save_label = "Enregistrer et envoyer le devis au demandeur" if st.session_state.language == "fr" else "Save and send quotation to requester"
                 existing_unsigned_path = record.get("unsigned_quote_path", "")
                 with st.form(f"unsigned_quote_form_{selected_id}"):
                     unsigned_quote_file = st.file_uploader(
@@ -2842,27 +2855,75 @@ def render_admin():
                         type=["pdf", "doc", "docx"],
                         key=f"unsigned_quote_upload_{selected_id}",
                     )
+                    unsigned_quote_comment = st.text_area(
+                        "Commentaire à l’intention du demandeur" if st.session_state.language == "fr" else "Comment for the requester",
+                        value=record.get("unsigned_quote_comment", ""),
+                        help="Ce commentaire sera inclus dans l’e-mail envoyé avec le devis." if st.session_state.language == "fr" else "This comment will be included in the email sent with the quotation.",
+                        key=f"unsigned_quote_comment_{selected_id}",
+                    )
                     if existing_unsigned_path:
                         st.caption(("Devis non signé déjà déposé : " if st.session_state.language == "fr" else "Unsigned quotation already uploaded: ") + existing_unsigned_path)
                     save_unsigned_quote = st.form_submit_button(unsigned_save_label)
-                if save_unsigned_quote and unsigned_quote_file is not None:
-                    try:
-                        ensure_remote_folder("OV-Chimie")
-                        ensure_remote_folder("OV-Chimie/Devis_Non_Signes")
-                        safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(unsigned_quote_file.name)).strip("-") or "devis-non-signe"
-                        new_unsigned_path = f"OV-Chimie/Devis_Non_Signes/{selected_id}_{safe_original}"
-                        upload_response = webdav_request("PUT", new_unsigned_path, data=unsigned_quote_file.getvalue())
-                        upload_response.raise_for_status()
-                        record["unsigned_quote_path"] = new_unsigned_path
-                        record["unsigned_quote_filename"] = unsigned_quote_file.name
-                        record["unsigned_quote_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-                        save_metadata(records)
-                        st.success("Devis non signé enregistré." if st.session_state.language == "fr" else "Unsigned quotation saved.")
-                        st.rerun()
-                    except Exception as exc:
-                        st.error(("Impossible d'enregistrer le devis non signé : " if st.session_state.language == "fr" else "Could not save unsigned quotation: ") + str(exc))
-                elif save_unsigned_quote:
-                    st.warning("Sélectionne un fichier avant d'enregistrer." if st.session_state.language == "fr" else "Select a file before saving.")
+                if save_unsigned_quote:
+                    if unsigned_quote_file is None:
+                        st.warning("Sélectionne un fichier de devis avant de l’enregistrer et de l’envoyer." if st.session_state.language == "fr" else "Select a quotation file before saving and sending it.")
+                    elif not str(record.get("manager_email", "")).strip():
+                        st.error("L’adresse e-mail du demandeur est absente de la demande. Le devis n’a pas été envoyé." if st.session_state.language == "fr" else "The requester email address is missing. The quotation was not sent.")
+                    else:
+                        try:
+                            ensure_remote_folder("OV-Chimie")
+                            ensure_remote_folder("OV-Chimie/Devis_Non_Signes")
+                            safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(unsigned_quote_file.name)).strip("-") or "devis-non-signe"
+                            new_unsigned_path = f"OV-Chimie/Devis_Non_Signes/{selected_id}_{safe_original}"
+                            quote_bytes = unsigned_quote_file.getvalue()
+                            upload_response = webdav_request("PUT", new_unsigned_path, data=quote_bytes)
+                            upload_response.raise_for_status()
+                            received_at = datetime.now().astimezone().isoformat(timespec="seconds")
+                            record["unsigned_quote_path"] = new_unsigned_path
+                            record["unsigned_quote_filename"] = unsigned_quote_file.name
+                            record["unsigned_quote_updated_at"] = received_at
+                            record["unsigned_quote_comment"] = unsigned_quote_comment.strip()
+                            save_metadata(records)
+
+                            if st.session_state.language == "fr":
+                                mail_subject = f"Votre devis non signé – Réf. {public_request_reference(record)}"
+                                mail_body = (
+                                    f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
+                                    "Veuillez trouver en pièce jointe le devis non signé relatif à votre demande d’analyse.\n\n"
+                                    f"Référence complète de la demande : {public_request_reference(record)}\n"
+                                    f"Projet : {record.get('project_name', '—')}\n"
+                                    f"Fichier joint : {unsigned_quote_file.name}\n\n"
+                                    f"Commentaire de la plateforme :\n{unsigned_quote_comment.strip() or 'Aucun commentaire.'}\n\n"
+                                    "Le devis joint est non signé. Seul le devis signé fera foi.\n\n"
+                                    "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
+                                )
+                            else:
+                                mail_subject = f"Your unsigned quotation – Ref. {public_request_reference(record)}"
+                                mail_body = (
+                                    f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
+                                    "Please find attached the unsigned quotation for your analysis request.\n\n"
+                                    f"Full request reference: {public_request_reference(record)}\n"
+                                    f"Project: {record.get('project_name', '—')}\n"
+                                    f"Attached file: {unsigned_quote_file.name}\n\n"
+                                    f"Message from the platform:\n{unsigned_quote_comment.strip() or 'No comment.'}\n\n"
+                                    "The attached quotation is unsigned. Only the signed quotation is authoritative.\n\n"
+                                    "Best regards,\nOV-Chimie-Metabolisme Platform"
+                                )
+                            quote_cc = join_email_recipients(
+                                record.get("assigned_operator_email", ""),
+                                DEFAULT_ADMIN_EMAIL,
+                            )
+                            send_email(
+                                record.get("manager_email", "").strip(),
+                                mail_subject,
+                                mail_body,
+                                cc=quote_cc,
+                                attachments=[(unsigned_quote_file.name, quote_bytes, unsigned_quote_file.type)],
+                            )
+                            st.success("Devis enregistré dans Nextcloud et notification envoyée au demandeur (opérateur et OV-Chimie en copie)." if st.session_state.language == "fr" else "Quotation saved to Nextcloud and notification sent to the requester (operator and OV-Chimie copied).")
+                            st.rerun()
+                        except Exception as exc:
+                            st.error(("Le devis a peut-être été enregistré, mais l’envoi de la notification a échoué : " if st.session_state.language == "fr" else "The quotation may have been saved, but the notification could not be sent: ") + str(exc))
 
                 # Signed quotation management: the file is stored separately from request documents.
                 quote_signed_label = "Devis signé" if st.session_state.language == "fr" else "Quotation signed"
