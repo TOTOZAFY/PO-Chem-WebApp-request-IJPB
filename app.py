@@ -2714,6 +2714,9 @@ def render_admin():
                 operator_status_label = "Opérateur en charge de l’analyse" if st.session_state.language == "fr" else "Operator responsible for the analysis"
                 operator_status_value = record.get("assigned_operator", "").strip() or ("Non renseigné" if st.session_state.language == "fr" else "Not specified")
                 st.write(f"**{operator_status_label} :** {operator_status_value}")
+                po_status_label = "Statut du bon de commande" if st.session_state.language == "fr" else "Purchase order status"
+                po_status_value = ("Reçu" if st.session_state.language == "fr" else "Received") if record.get("purchase_order_received") or record.get("purchase_order_path") else ("En attente" if st.session_state.language == "fr" else "Pending")
+                st.write(f"**{po_status_label} :** {po_status_value}")
                 documents_heading = "État des documents" if st.session_state.language == "fr" else "Document status"
                 st.markdown(f"**{documents_heading}**")
                 uploaded_label = "Importé" if st.session_state.language == "fr" else "Uploaded"
@@ -4061,6 +4064,116 @@ def render_fair_profile_manager(sheet):
                             profile_payload["profiles"][old_name] = removed
                         st.error(("Impossible de supprimer le profil : " if fr else "Could not delete profile: ") + str(exc))
 
+def render_purchase_order_import():
+    """Public requester portal to attach a purchase order to an existing request."""
+    fr = st.session_state.get("language", "fr") == "fr"
+    st.title("Importation de bon de commande" if fr else "Purchase order upload")
+    st.write(
+        "Renseignez l’adresse e-mail utilisée lors de la demande et sa référence, puis importez le bon de commande."
+        if fr else
+        "Enter the email address used for the request and its reference, then upload the purchase order."
+    )
+    with st.form("requester_purchase_order_import_form", clear_on_submit=False):
+        requester_email = st.text_input(
+            "Adresse e-mail du demandeur *" if fr else "Requester email address *",
+            placeholder="nom@laboratoire.fr",
+        ).strip()
+        request_reference = st.text_input(
+            "Référence de la demande *" if fr else "Request reference *",
+            placeholder="Ex. PO-CHEM-2026-001",
+        ).strip()
+        purchase_order_file = st.file_uploader(
+            "Bon de commande * (PDF, DOC ou DOCX)" if fr else "Purchase order * (PDF, DOC or DOCX)",
+            type=["pdf", "doc", "docx"],
+            key="requester_purchase_order_file",
+        )
+        submitted = st.form_submit_button(
+            "Envoyer le bon de commande" if fr else "Submit purchase order",
+            type="primary", use_container_width=True,
+        )
+
+    if not submitted:
+        return
+    if not requester_email or not request_reference or purchase_order_file is None:
+        st.warning("Les trois champs sont obligatoires." if fr else "All three fields are required.")
+        return
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", requester_email):
+        st.warning("L’adresse e-mail n’est pas valide." if fr else "The email address is not valid.")
+        return
+
+    try:
+        records = load_metadata()
+        record = next((r for r in records
+                       if str(r.get("id", "")).strip().casefold() == request_reference.casefold()
+                       and str(r.get("manager_email", "")).strip().casefold() == requester_email.casefold()
+                       and not r.get("deleted", False)), None)
+        if record is None:
+            st.error(
+                "Aucune demande ne correspond à cette référence et à cette adresse e-mail. Vérifiez les informations saisies."
+                if fr else
+                "No request matches this reference and email address. Please check the details."
+            )
+            return
+
+        ensure_remote_folder("OV-Chimie")
+        ensure_remote_folder("OV-Chimie/Bons_Commande")
+        safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(purchase_order_file.name)).strip("-") or "bon-commande"
+        new_path = f"OV-Chimie/Bons_Commande/{record['id']}_{safe_original}"
+        upload_response = webdav_request("PUT", new_path, data=purchase_order_file.getvalue())
+        upload_response.raise_for_status()
+
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        record["purchase_order_path"] = new_path
+        record["purchase_order_filename"] = purchase_order_file.name
+        record["purchase_order_uploaded_by"] = requester_email
+        record["purchase_order_updated_at"] = now
+        record["purchase_order_status"] = "received"
+        record["purchase_order_received"] = True
+        save_metadata(records)
+
+        notification_error = None
+        try:
+            settings = load_notification_settings()
+            # Purchase-order notifications must always reach the OV-Chimie mailbox.
+            admin_email = DEFAULT_ADMIN_EMAIL
+            operator_email = str(record.get("assigned_operator_email", "")).strip()
+            ijpb_email = str(settings.get("ijpb_admin_email", "")).strip()
+            cc = join_email_recipients(operator_email, ijpb_email)
+            subject = (
+                f"Bon de commande reçu – demande {record['id']}"
+                if fr else f"Purchase order received – request {record['id']}"
+            )
+            body = (
+                f"Un bon de commande a été importé pour la demande {record['id']}.\n"
+                f"Projet : {record.get('project_name', '')}\n"
+                f"Demandeur : {record.get('project_manager', '')} ({requester_email})\n"
+                f"Opérateur : {record.get('assigned_operator', '') or 'Non renseigné'}\n"
+                f"Fichier Nextcloud : {new_path}\nStatut du bon de commande : reçu"
+                if fr else
+                f"A purchase order was uploaded for request {record['id']}.\n"
+                f"Project: {record.get('project_name', '')}\nRequester: {record.get('project_manager', '')} ({requester_email})\n"
+                f"Operator: {record.get('assigned_operator', '') or 'Not specified'}\n"
+                f"Nextcloud file: {new_path}\nPurchase order status: received"
+            )
+            if not admin_email:
+                raise RuntimeError("L'adresse OV-Chimie n'est pas configurée." if fr else "The OV-Chimie email address is not configured.")
+            send_email(admin_email, subject, body, cc=cc, reply_to=requester_email)
+        except Exception as mail_exc:
+            notification_error = str(mail_exc)
+
+        st.success(
+            f"Le bon de commande de la demande {record['id']} a été enregistré dans Nextcloud. Le résumé de la demande a été mis à jour."
+            if fr else
+            f"The purchase order for request {record['id']} was saved to Nextcloud. The request summary has been updated."
+        )
+        if notification_error:
+            st.warning(("Fichier enregistré, mais l’envoi des notifications a échoué : " if fr else "File saved, but notification delivery failed: ") + notification_error)
+        else:
+            st.info("Notifications envoyées à OV-Chimie, à l’opérateur affecté (si renseigné) et au personnel administratif de l’IJPB (si configuré)." if fr else "Notifications sent to OV-Chimie, the assigned operator (if set), and IJPB administrative staff (if configured).")
+    except Exception as exc:
+        st.error(("L’importation a échoué : " if fr else "Upload failed: ") + str(exc))
+
+
 # Main navigation. Keep the internal page key explicit so the routing below
 # never references an undefined `page` variable.
 if st.query_params.get("fair_token"):
@@ -4070,6 +4183,7 @@ else:
     _navigation_options = {
         ("Demande d'analyse" if _fr_navigation else "Analysis request"): "form",
         ("FAIR" if _fr_navigation else "FAIR"): "fair",
+        ("Importation de bon de commande" if _fr_navigation else "Purchase order upload"): "purchase_order",
         ("Administrateur" if _fr_navigation else "Administrator"): "admin",
         ("Contact" if _fr_navigation else "Contact"): "contact",
     }
@@ -4179,6 +4293,8 @@ elif page == "admin":
 
 elif page == "fair":
     render_fair_portal()
+elif page == "purchase_order":
+    render_purchase_order_import()
 elif page == "contact":
     st.title("Contacter l’administrateur" if st.session_state.language == "fr" else "Contact the administrator")
     st.write(
