@@ -2855,10 +2855,17 @@ def render_admin():
                         type=["pdf", "doc", "docx"],
                         key=f"unsigned_quote_upload_{selected_id}",
                     )
+                    default_unsigned_quote_comment = (
+                        "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre devis signé et bon de commande via l'interface en utilisant votre adresse mail de demande ainsi que la référence de votre demande.\n\n"
+                        "Le devis joint est non signé. Seul le devis signé et bon de commande feront foi."
+                        if st.session_state.language == "fr"
+                        else "Please find the quotation corresponding to your request. After approval and signature, please send us your purchase order through the interface using your request email address and request reference.\n\n"
+                        "The attached quotation is unsigned. Only the signed quotation and purchase order will be considered valid."
+                    )
                     unsigned_quote_comment = st.text_area(
                         "Commentaire à l’intention du demandeur" if st.session_state.language == "fr" else "Comment for the requester",
-                        value=record.get("unsigned_quote_comment", ""),
-                        help="Ce commentaire sera inclus dans l’e-mail envoyé avec le devis." if st.session_state.language == "fr" else "This comment will be included in the email sent with the quotation.",
+                        value=record.get("unsigned_quote_comment") or default_unsigned_quote_comment,
+                        help="Ce commentaire sera inclus dans l’e-mail envoyé avec le devis. Tu peux le modifier avant l’envoi." if st.session_state.language == "fr" else "This comment will be included in the email sent with the quotation. You can edit it before sending.",
                         key=f"unsigned_quote_comment_{selected_id}",
                     )
                     if existing_unsigned_path:
@@ -2894,7 +2901,6 @@ def render_admin():
                                     f"Projet : {record.get('project_name', '—')}\n"
                                     f"Fichier joint : {unsigned_quote_file.name}\n\n"
                                     f"Commentaire de la plateforme :\n{unsigned_quote_comment.strip() or 'Aucun commentaire.'}\n\n"
-                                    "Le devis joint est non signé. Seul le devis signé fera foi.\n\n"
                                     "Cordialement,\nPlateforme OV-Chimie-Métabolisme"
                                 )
                             else:
