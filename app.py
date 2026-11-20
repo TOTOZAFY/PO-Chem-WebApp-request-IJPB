@@ -2192,9 +2192,10 @@ def render_admin():
                 else ["Full reference", "Project", "Requester", "Decision", "Progress"]
             )
             st.markdown(
-                '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">'
+                '<div style="max-height:420px;overflow:auto;width:100%;border:1px solid #D0D5DD;border-radius:6px;">'
+                '<table style="width:100%;min-width:850px;border-collapse:separate;border-spacing:0;font-size:13px;">'
                 "<thead><tr>" + "".join(
-                    f'<th style="text-align:left;padding:9px;border-bottom:1px solid #D0D5DD;">{h}</th>' for h in headers
+                    f'<th style="position:sticky;top:0;z-index:2;background:#FFFFFF;text-align:left;padding:9px;border-bottom:1px solid #D0D5DD;">{h}</th>' for h in headers
                 ) + "</tr></thead><tbody>" + "".join(rows_html) + "</tbody></table></div>",
                 unsafe_allow_html=True,
             )
