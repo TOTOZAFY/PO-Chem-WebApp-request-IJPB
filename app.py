@@ -4633,13 +4633,13 @@ def render_purchase_order_import():
 
         comment_text = str(upload_comment or "").strip()
         comment_section_fr = (
-            "\\n\\nCOMMENTAIRE DU DEMANDEUR\\n"
-            "------------------------------------------------------------\\n" + comment_text
+            "\n\nCOMMENTAIRE DU DEMANDEUR\n"
+            "------------------------------------------------------------\n" + comment_text
             if comment_text else ""
         )
         comment_section_en = (
-            "\\n\\nREQUESTER COMMENT\\n"
-            "------------------------------------------------------------\\n" + comment_text
+            "\n\nREQUESTER COMMENT\n"
+            "------------------------------------------------------------\n" + comment_text
             if comment_text else ""
         )
 
