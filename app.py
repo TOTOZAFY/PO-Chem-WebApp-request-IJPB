@@ -4552,6 +4552,17 @@ def render_purchase_order_import():
         key="requester_purchase_order_file",
         disabled=not reference_is_valid,
     )
+    upload_comment = st.text_area(
+        "Commentaire (facultatif)" if fr else "Comment (optional)",
+        placeholder=(
+            "Ajoutez un commentaire à transmettre avec vos documents."
+            if fr else
+            "Add a comment to send with your documents."
+        ),
+        key="requester_document_upload_comment",
+        disabled=not reference_is_valid,
+        height=110,
+    )
     has_uploaded_document = signed_quote_file is not None or purchase_order_file is not None
     submitted = st.button(
         "Envoyer le(s) document(s)" if fr else "Submit document(s)",
@@ -4620,6 +4631,18 @@ def render_purchase_order_import():
         uploaded_summary_fr = "\n".join(f"- {label} : {filename}" for label, filename in uploaded_labels)
         uploaded_summary_en = "\n".join(f"- {'Signed quotation' if label == 'Devis signé' else 'Purchase order'}: {filename}" for label, filename in uploaded_labels)
 
+        comment_text = str(upload_comment or "").strip()
+        comment_section_fr = (
+            "\\n\\nCOMMENTAIRE DU DEMANDEUR\\n"
+            "------------------------------------------------------------\\n" + comment_text
+            if comment_text else ""
+        )
+        comment_section_en = (
+            "\\n\\nREQUESTER COMMENT\\n"
+            "------------------------------------------------------------\\n" + comment_text
+            if comment_text else ""
+        )
+
         notification_errors = []
         # Internal notification: IJPB administrative staff is the primary
         # recipient; OV-Chimie and the assigned operator are copied.
@@ -4655,6 +4678,7 @@ def render_purchase_order_import():
                 f"- Date de réception : {received_at}\n\n"
                 f"Les documents ont été enregistrés dans Nextcloud et associés à la référence de cette demande.\n\n"
                 f"Merci de prendre en compte cette mise à jour."
+                f"{comment_section_fr}"
                 if fr else
                 f"Hello,\n\n"
                 f"One or more documents have just been submitted for the following request:\n\n"
@@ -4671,6 +4695,7 @@ def render_purchase_order_import():
                 f"- Date received: {datetime.fromisoformat(now).astimezone().strftime('%d/%m/%Y at %H:%M:%S')}\n\n"
                 f"The documents have been saved in Nextcloud and linked to this request reference.\n\n"
                 f"Please take this update into account."
+                f"{comment_section_en}"
             )
             send_email(ijpb_email, internal_subject, internal_body, cc=cc, reply_to=requester_email)
         except Exception as mail_exc:
@@ -4702,6 +4727,7 @@ def render_purchase_order_import():
                 f"Date de réception : {requester_received_at}\n\n"
                 f"Vos documents ont été enregistrés dans l'espace Nextcloud de la plateforme OV-Chimie.\n\n"
                 f"Cordialement,\nL’équipe OV-Chimie"
+                f"{comment_section_fr}"
                 if fr else
                 f"Hello,\n\n"
                 f"We confirm receipt of the following document(s) for your request.\n\n"
@@ -4717,6 +4743,7 @@ def render_purchase_order_import():
                 f"Received on: {requester_received_at_en}\n\n"
                 f"Your documents have been saved in the OV-Chimie platform's Nextcloud space.\n\n"
                 f"Best regards,\nThe OV-Chimie team"
+                f"{comment_section_en}"
             )
             send_email(requester_email, requester_subject, add_application_link_to_requester_email(requester_body, "fr" if fr else "en"))
         except Exception as mail_exc:
