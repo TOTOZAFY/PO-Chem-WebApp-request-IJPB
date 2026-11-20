@@ -2736,8 +2736,8 @@ def render_admin():
                         )
                         saved_unsigned_quote_comment = str(record.get("unsigned_quote_comment") or "").strip()
                         legacy_unsigned_quote_comments = {
-                            "voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via l'interface",
-                            "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via l'interface",
+                            "voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via ce lien https://po-chem-webapp-request-ijpb.streamlit.app",
+                            "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre bon de commande via ce lien https://po-chem-webapp-request-ijpb.streamlit.app",
                         }
                         if saved_unsigned_quote_comment in legacy_unsigned_quote_comments:
                             saved_unsigned_quote_comment = ""
