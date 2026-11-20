@@ -2952,62 +2952,21 @@ def render_admin():
                         except Exception as exc:
                             st.error(("Le devis a peut-être été enregistré, mais l’envoi de la notification a échoué : " if st.session_state.language == "fr" else "The quotation may have been saved, but the notification could not be sent: ") + str(exc))
 
-                # Signed quotation management: the file is stored separately from request documents.
-                quote_signed_label = "Devis signé" if st.session_state.language == "fr" else "Quotation signed"
-                quote_upload_label = "Importer le devis signé (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload signed quotation (PDF, DOC or DOCX)"
-                quote_save_label = "Enregistrer le statut et le devis" if st.session_state.language == "fr" else "Save status and quotation"
+                # The requester now uploads the signed quotation through the public
+                # document-import page. The administrator only sees its receipt status.
                 existing_quote_path = record.get("signed_quote_path", "")
-                with st.form(f"signed_quote_form_{selected_id}"):
-                    quote_signed = st.checkbox(
-                        quote_signed_label,
-                        value=bool(record.get("quote_signed", False)),
+                if existing_quote_path:
+                    st.success(
+                        ("Devis signé reçu via l’interface demandeur : " if st.session_state.language == "fr" else "Signed quotation received through the requester interface: ")
+                        + existing_quote_path
                     )
-                    quote_file = st.file_uploader(
-                        quote_upload_label,
-                        type=["pdf", "doc", "docx"],
-                        key=f"signed_quote_upload_{selected_id}",
+                else:
+                    st.info(
+                        "Devis signé non encore reçu du demandeur."
+                        if st.session_state.language == "fr"
+                        else "Signed quotation has not yet been received from the requester."
                     )
-                    if existing_quote_path:
-                        st.caption(
-                            ("Devis déjà déposé : " if st.session_state.language == "fr" else "Quotation already uploaded: ")
-                            + existing_quote_path
-                        )
-                    save_quote = st.form_submit_button(quote_save_label)
-                if save_quote:
-                    if quote_signed and not (quote_file or existing_quote_path):
-                        st.warning(
-                            "Coche le statut uniquement après avoir importé le devis signé."
-                            if st.session_state.language == "fr"
-                            else "Upload the signed quotation before marking it as signed."
-                        )
-                    else:
-                        try:
-                            new_quote_path = existing_quote_path
-                            if quote_file is not None:
-                                ensure_remote_folder("OV-Chimie")
-                                ensure_remote_folder("OV-Chimie/Devis_Signes")
-                                safe_original = re.sub(r"[^A-Za-z0-9._-]+", "-", os.path.basename(quote_file.name)).strip("-")
-                                safe_original = safe_original or "devis-signe"
-                                new_quote_path = f"OV-Chimie/Devis_Signes/{selected_id}_{safe_original}"
-                                quote_response = webdav_request("PUT", new_quote_path, data=quote_file.getvalue())
-                                quote_response.raise_for_status()
-                            record["quote_signed"] = bool(quote_signed)
-                            record["signed_quote_path"] = new_quote_path
-                            record["signed_quote_filename"] = quote_file.name if quote_file is not None else record.get("signed_quote_filename", "")
-                            record["quote_updated_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
-                            save_metadata(records)
-                            st.success(
-                                "Statut du devis enregistré dans Nextcloud."
-                                if st.session_state.language == "fr"
-                                else "Quotation status saved to Nextcloud."
-                            )
-                            st.rerun()
-                        except Exception as exc:
-                            st.error(
-                                f"Impossible d'enregistrer le devis : {exc}"
-                                if st.session_state.language == "fr"
-                                else f"Could not save quotation: {exc}"
-                            )
+
                 # Purchase order: upload first, then require manual amount validation in a popup.
                 purchase_order_label = "Bon de commande" if st.session_state.language == "fr" else "Purchase order"
                 purchase_order_upload_label = "Importer le bon de commande (PDF, DOC ou DOCX)" if st.session_state.language == "fr" else "Upload purchase order (PDF, DOC or DOCX)"
@@ -4316,6 +4275,8 @@ def render_purchase_order_import():
             record["signed_quote_filename"] = signed_quote_file.name
             record["signed_quote_uploaded_by"] = requester_email
             record["signed_quote_updated_at"] = now
+            record["quote_signed"] = True
+            record["quote_updated_at"] = now
             uploaded_labels.append(("Devis signé", signed_quote_file.name))
 
         if purchase_order_file is not None:
