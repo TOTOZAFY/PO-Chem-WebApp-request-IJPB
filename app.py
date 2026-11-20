@@ -3699,11 +3699,18 @@ def render_form():
     steps = t("steps")
     step = min(st.session_state.step, len(steps) - 1)
 
+    is_french_interface = st.session_state.get("language", "fr") == "fr"
     hero_title = (
-        "OV-Chimie-Métabolisme/IJPB-INRAE Versailles"
-        if st.session_state.get("language", "fr") == "fr"
-        else "PO Chemistry-Metabolism/IJPB-INRAE Versailles"
+        "Plateforme OV-Chimie-Métabolisme"
+        if is_french_interface
+        else "OV-Chimie-Metabolism Platform"
     )
+    hero_subtitle = (
+        "Gestion des demandes et prestations analytiques"
+        if is_french_interface
+        else "Analysis Requests and Analytical Services"
+    )
+    hero_affiliation = "IJPB – INRAE Versailles"
     hero_html = """
         <style>
         .block-container {
@@ -3720,10 +3727,17 @@ def render_form():
                background: linear-gradient(120deg,#edf5fb,#f4f7f2); margin-bottom: 1rem;}
         .hero h1 {margin: 0; color: #183b56; font-size: 1.8rem;}
         .hero p {margin: .4rem 0 0; color: #526575;}
+        .hero .hero-subtitle {font-size: 1.12rem; font-weight: 600; color: #31566f;}
+        .hero .hero-affiliation {font-size: .92rem; margin-top: .25rem;}
         </style>
-        <div class="hero"><h1>__HERO_TITLE__</h1>
-        <p>PO-Chem-WebApp-Request</p></div>
-        """.replace("__HERO_TITLE__", hero_title)
+        <div class="hero">
+            <h1>__HERO_TITLE__</h1>
+            <p class="hero-subtitle">__HERO_SUBTITLE__</p>
+            <p class="hero-affiliation">__HERO_AFFILIATION__</p>
+        </div>
+        """.replace("__HERO_TITLE__", hero_title).replace(
+            "__HERO_SUBTITLE__", hero_subtitle
+        ).replace("__HERO_AFFILIATION__", hero_affiliation)
     st.markdown(hero_html, unsafe_allow_html=True)
     st.write(t("intro"))
 
