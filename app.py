@@ -2730,9 +2730,9 @@ def render_admin():
                             key=f"unsigned_quote_upload_{selected_id}",
                         )
                         default_unsigned_quote_comment = (
-                            "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre devis signé et bon de commande via l'interface en utilisant votre adresse mail de demande ainsi que la référence de votre demande."
+                            "Voici le devis correspondant à votre demande, après acceptation et signature, veuillez nous transmettre votre devis signé et bon de commande via ce lien https://po-chem-webapp-request-ijpb.streamlit.app en utilisant votre adresse mail de demande ainsi que la référence de votre demande."
                             if st.session_state.language == "fr"
-                            else "Please find the quotation corresponding to your request. After approval and signature, please send us your signed quotation and purchase order through the interface using your request email address and request reference."
+                            else "Please find the quotation corresponding to your request. After approval and signature, please send us your signed quotation and purchase order through the link https://po-chem-webapp-request-ijpb.streamlit.app/ using your request email address and request reference."
                         )
                         saved_unsigned_quote_comment = str(record.get("unsigned_quote_comment") or "").strip()
                         legacy_unsigned_quote_comments = {
