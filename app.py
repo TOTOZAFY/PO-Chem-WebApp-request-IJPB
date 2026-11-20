@@ -3074,10 +3074,29 @@ def render_admin():
                                         unit = None
                                     if unit is None:
                                         price_complete = False
+                                        unit_text_fr = "Non renseigné dans le tableau des prix"
+                                        unit_text_en = "Not set in the price catalog"
+                                        line_total_text_fr = "Indisponible"
+                                        line_total_text_en = "Unavailable"
                                     else:
-                                        total_price += unit * count * multiplier
-                                    details_fr.append(f"- {atype} | {count} échantillon(s) | {mode or 'Mode non précisé'}")
-                                    details_en.append(f"- {atype} | {count} sample(s) | {mode or 'Mode not specified'}")
+                                        line_total = unit * count * multiplier
+                                        total_price += line_total
+                                        unit_text_fr = f"{unit:.2f} €"
+                                        unit_text_en = f"€{unit:.2f}"
+                                        line_total_text_fr = f"{line_total:.2f} €"
+                                        line_total_text_en = f"€{line_total:.2f}"
+                                    details_fr.append(
+                                        f"- {atype} | Prix unitaire : {unit_text_fr} | "
+                                        f"{count} échantillon(s) | {mode or 'Mode non précisé'}"
+                                        f"{' (coefficient ×2)' if multiplier == 2 else ''} | "
+                                        f"Prix total pour cette analyse : {line_total_text_fr}"
+                                    )
+                                    details_en.append(
+                                        f"- {atype} | Unit price: {unit_text_en} | "
+                                        f"{count} sample(s) | {mode or 'Mode not specified'}"
+                                        f"{' (×2 multiplier)' if multiplier == 2 else ''} | "
+                                        f"Total for this analysis: {line_total_text_en}"
+                                    )
                                 sample_count = sum(max(1, int(x.get("sample_count", 1) or 1)) for x in analysis_items)
                                 analysis_details_fr = "\n".join(details_fr)
                                 analysis_details_en = "\n".join(details_en)
@@ -3097,12 +3116,13 @@ def render_admin():
                                     body = (
                                         f"Bonjour {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
                                         f"Votre demande d'analyse a été acceptée.\n\n"
-                                        f"Référence complète de la demande : {public_request_reference(record)} | "
-                                        f"Nombre d'échantillons : {sample_count}\n"
-                                        f"Analyses demandées :\n{analysis_details_fr} | "
-                                        f"Type de laboratoire : {visibility} | "
+                                        f"Référence complète de la demande : {public_request_reference(record)}\n"
+                                        f"Nombre total d'échantillons : {sample_count}\n"
+                                        f"Type de laboratoire : {visibility}\n"
                                         f"Opérateur en charge de l’analyse : {record.get('assigned_operator') or 'Non renseigné'}\n\n"
-                                        f"Coût de l’analyse : {price_text_fr}\n\n"
+                                        f"Analyses demandées et détail des tarifs (selon le tableau des prix — catégorie {visibility}) :\n"
+                                        f"{analysis_details_fr}\n\n"
+                                        f"PRIX GLOBAL DE LA DEMANDE : {price_text_fr}\n\n"
                                         f"{quote_followup_fr}\n"
                                         f"{disclaimer_fr}\n\n"
                                         f"Commentaire : {comment.strip() or 'Aucun commentaire.'}\n\n"
@@ -3112,12 +3132,13 @@ def render_admin():
                                     body = (
                                         f"Hello {record.get('project_manager_first_name') or record.get('project_manager', '')},\n\n"
                                         "Your analysis request has been accepted.\n\n"
-                                        f"Full request reference: {public_request_reference(record)} | "
-                                        f"Number of samples: {sample_count}\n"
-                                        f"Requested analyses:\n{analysis_details_en} | "
-                                        f"Laboratory type: {visibility} | "
+                                        f"Full request reference: {public_request_reference(record)}\n"
+                                        f"Total number of samples: {sample_count}\n"
+                                        f"Laboratory type: {visibility}\n"
                                         f"Operator responsible for the analysis: {record.get('assigned_operator') or 'Not specified'}\n\n"
-                                        f"Analysis cost: {price_text_en}\n\n"
+                                        f"Requested analyses and price details (according to the {visibility} price catalog):\n"
+                                        f"{analysis_details_en}\n\n"
+                                        f"OVERALL REQUEST PRICE: {price_text_en}\n\n"
                                         f"{quote_followup_en}\n"
                                         f"{disclaimer_en}\n\n"
                                         f"Comment: {comment.strip() or 'No comment.'}\n\n"
