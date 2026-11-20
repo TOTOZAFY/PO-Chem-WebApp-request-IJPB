@@ -2015,7 +2015,6 @@ def render_admin():
         c2.metric(t("accepted"), statuses.count("accepted"))
         c3.metric(t("refused"), statuses.count("refused"))
 
-        st.subheader(t("analysis_type_stats"))
         analysis_counts = {}
         analysis_chart_data = None
         status_chart_data = None
@@ -2027,17 +2026,13 @@ def render_admin():
             analysis_counts[display_type] = analysis_counts.get(display_type, 0) + 1
         if analysis_counts:
             analysis_chart_data = dict(sorted(analysis_counts.items()))
-        else:
-            st.caption(t("no_requests"))
-
-        st.subheader(t("by_status"))
+        
         status_labels = {
             "pending": t("status_pending"), "accepted": t("status_accepted"), "refused": t("status_refused")
         }
         counts = {status_labels[k]: statuses.count(k) for k in status_labels}
         status_chart_data = counts
 
-        st.subheader(t("by_month"))
         monthly = {}
         for item in active_records:
             month = str(item.get("submitted_at", ""))[:7]
@@ -2045,10 +2040,7 @@ def render_admin():
                 monthly[month] = monthly.get(month, 0) + 1
         if monthly:
             monthly_chart_data = dict(sorted(monthly.items()))
-        else:
-            st.caption(t("no_requests"))
-
-        st.subheader(t("yearly"))
+        
         yearly = {}
         for item in active_records:
             year = str(item.get("submitted_at", ""))[:4]
@@ -2056,21 +2048,6 @@ def render_admin():
                 yearly[year] = yearly.get(year, 0) + 1
         if yearly:
             yearly_chart_data = dict(sorted(yearly.items()))
-
-        import csv
-        from io import StringIO
-        csv_buffer = StringIO()
-        fields = ["id", "project_name", "project_manager", "manager_email", "group", "group_address",
-                  "request_date", "submitted_at", "status", "admin_comment", "document_path", "quote_signed", "signed_quote_path", "analysis_type", "analysis_mode", "analysis_details"]
-        writer = csv.DictWriter(csv_buffer, fieldnames=fields, extrasaction="ignore")
-        writer.writeheader()
-        writer.writerows(active_records)
-        st.download_button(
-            t("export_csv"),
-            data=csv_buffer.getvalue().encode("utf-8-sig"),
-            file_name="PO-Chem-WebApp-Request_statistics.csv",
-            mime="text/csv",
-        )
 
         st.subheader(t("request_list"))
         if not active_records:
@@ -3456,20 +3433,44 @@ def render_admin():
         )
 
 
-    # All statistical charts are grouped at the bottom, after cumulative invoicing.
+    # All statistical charts and their headings are grouped at the bottom,
+    # after cumulative invoicing.
     st.subheader("Graphiques statistiques" if is_fr else "Statistical charts")
+    import csv
+    from io import StringIO
+    csv_buffer = StringIO()
+    fields = ["id", "project_name", "project_manager", "manager_email", "group", "group_address",
+          "request_date", "submitted_at", "status", "admin_comment", "document_path", "quote_signed", "signed_quote_path", "analysis_type", "analysis_mode", "analysis_details"]
+    writer = csv.DictWriter(csv_buffer, fieldnames=fields, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(active_records)
+    st.download_button(
+        t("export_csv"),
+        data=csv_buffer.getvalue().encode("utf-8-sig"),
+        file_name="PO-Chem-WebApp-Request_statistics.csv",
+        mime="text/csv",
+    )
+
+    st.markdown("**Demandes par type d’analyse**" if is_fr else "**Requests by analysis type**")
     if analysis_chart_data:
-        st.markdown("**Demandes par type d’analyse**" if is_fr else "**Requests by analysis type**")
         st.bar_chart(analysis_chart_data)
+    else:
+        st.caption(t("no_requests"))
+
+    st.markdown("**Répartition par statut**" if is_fr else "**Distribution by status**")
     if status_chart_data:
-        st.markdown("**Répartition par statut**" if is_fr else "**Distribution by status**")
         st.bar_chart(status_chart_data)
+
+    st.markdown("**Demandes par mois**" if is_fr else "**Requests by month**")
     if monthly_chart_data:
-        st.markdown("**Demandes par mois**" if is_fr else "**Requests by month**")
         st.bar_chart(monthly_chart_data)
+    else:
+        st.caption(t("no_requests"))
+
+    st.markdown("**Demandes par année**" if is_fr else "**Requests by year**")
     if yearly_chart_data:
-        st.markdown("**Demandes par année**" if is_fr else "**Requests by year**")
         st.bar_chart(yearly_chart_data)
+
     if revenue_chart_data is not None:
         st.markdown("**Recettes annuelles indicatives**" if is_fr else "**Indicative annual revenue**")
         st.bar_chart(revenue_chart_data)
