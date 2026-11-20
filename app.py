@@ -776,14 +776,14 @@ def add_application_link_to_requester_email(body, language="fr"):
         return body
     if language == "fr":
         reminder = (
-            "\\n\\nVous pouvez accéder à l’application PO-Chem via le lien suivant :\\n"
-            f"{app_url}\\n"
+            "\n\nVous pouvez accéder à l’application PO-Chem via le lien suivant :\n"
+            f"{app_url}\n"
             "Conservez la référence complète de votre demande pour vos prochaines démarches."
         )
     else:
         reminder = (
-            "\\n\\nYou can access the PO-Chem application using the following link:\\n"
-            f"{app_url}\\n"
+            "\n\nYou can access the PO-Chem application using the following link:\n"
+            f"{app_url}\n"
             "Keep your full request reference for your next steps."
         )
     return str(body).rstrip() + reminder
