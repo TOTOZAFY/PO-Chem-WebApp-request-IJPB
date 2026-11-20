@@ -4887,6 +4887,285 @@ with st.sidebar.expander(
         )
 
 
+# Detailed user guide in the sidebar, directly below the personal-data notice.
+with st.sidebar.expander(
+    "Guide détaillé – Utilisation de l’interface" if _footer_fr else "Detailed user guide – How to use the interface",
+    expanded=False,
+):
+    if _footer_fr:
+        st.markdown(
+            """
+            ## 1. Demande d’analyse
+
+            Cette rubrique permet au demandeur de transmettre une nouvelle demande à la plateforme.
+
+            **Étape 1 – Informations générales**
+            - Renseignez le nom et le prénom du demandeur.
+            - Indiquez le groupe ou laboratoire et son adresse complète.
+            - Renseignez les coordonnées du personnel administratif si les champs sont proposés et pertinents.
+            - Vérifiez la date et les coordonnées avant de poursuivre.
+
+            **Étape 2 – Projet**
+            - Saisissez le nom du projet et les informations demandées sur le projet.
+            - Sélectionnez le type de laboratoire correspondant à votre situation : **Non public**, **Public** ou **Public (IJPB)**, selon les choix proposés.
+            - Les informations de financement ou d’accompagnement doivent être renseignées lorsqu’elles sont demandées.
+
+            **Étape 3 – Type(s) d’analyse**
+            - Sélectionnez le type d’analyse dans la liste.
+            - Choisissez le mode d’injection ou d’ionisation lorsqu’il est proposé (par exemple Split/Splitless ou ESI).
+            - Indiquez le nombre d’échantillons pour cette analyse.
+            - Si plusieurs prestations sont nécessaires, utilisez **Ajouter un autre type d’analyse** et renseignez chaque analyse séparément.
+            - Vérifiez que le nombre d’échantillons et le mode sont corrects pour chaque ligne.
+
+            **Étape 4 – Informations complémentaires et documents**
+            - Complétez les champs complémentaires affichés dans le formulaire.
+            - Joignez les fichiers demandés lorsqu’un téléversement est proposé.
+            - Lisez la charte de la plateforme et cochez la case d’acceptation obligatoire avant la soumission.
+
+            **Étape 5 – Vérification et soumission**
+            - Relisez le récapitulatif : coordonnées, laboratoire, projet, analyses et nombres d’échantillons.
+            - Soumettez la demande à la dernière étape.
+            - Conservez la **référence complète** affichée ou reçue par e-mail : elle sera nécessaire pour les échanges ultérieurs et le dépôt des documents.
+
+            ## 2. FAIR
+
+            La rubrique FAIR donne accès au classeur de métadonnées associé à une demande. Les feuilles disponibles sont :
+            - **Sample** : informations relatives aux échantillons.
+            - **Analysis** : informations relatives aux analyses.
+            - **Data treatment** : informations sur le traitement des données.
+            - **Pipeline Step by Step** : description des étapes du pipeline.
+
+            **Pour le demandeur**
+            1. Ouvrez la feuille souhaitée.
+            2. Choisissez le rôle demandeur lorsque cette question est affichée.
+            3. Saisissez la référence complète de la demande et l’adresse e-mail utilisée lors de la soumission.
+            4. Validez l’accès, puis complétez les informations demandées et enregistrez-les.
+
+            **Pour le personnel autorisé**
+            - L’administrateur sélectionne la demande concernée et accède aux feuilles disponibles.
+            - Dans Sample, le personnel autorisé peut également importer les File IDs administrateur lorsque cela est nécessaire.
+            - Respectez la structure du classeur et les identifiants d’échantillons déjà utilisés.
+
+            Si l’accès demandeur n’est pas encore autorisé, contactez la plateforme : le remplissage FAIR doit avoir été demandé par l’administrateur.
+
+            ## 3. Importation du devis signé et/ou du bon de commande
+
+            Cette rubrique permet au demandeur de déposer un ou deux documents pour une demande déjà enregistrée.
+
+            1. Saisissez l’adresse e-mail utilisée lors de la demande.
+            2. Saisissez la **référence complète** de la demande (identifiant, demandeur, projet et laboratoire).
+            3. Attendez le message confirmant que la demande est reconnue.
+            4. Ajoutez le devis signé, le bon de commande, ou les deux. Les deux fichiers sont facultatifs individuellement, mais au moins un document doit être transmis.
+            5. Ajoutez si nécessaire un commentaire destiné à accompagner l’envoi.
+            6. Cliquez sur le bouton d’envoi et attendez le message de confirmation.
+
+            Les documents sont associés à la demande et enregistrés dans l’espace Nextcloud de la plateforme. Un e-mail de confirmation est envoyé au demandeur et une notification est transmise aux destinataires internes prévus.
+
+            **Important :** vérifiez le nom et le contenu de chaque fichier avant l’envoi. En cas d’erreur de référence ou d’adresse e-mail, vérifiez les informations saisies.
+
+            ## 4. Administrateur – Gestion des demandes
+
+            Cette rubrique est réservée au personnel autorisé.
+
+            **Retrouver une demande**
+            - Utilisez la recherche par projet, demandeur ou référence.
+            - Sélectionnez la demande dans la liste.
+            - Consultez son avancement visuel et les informations associées.
+
+            **Gestion partie plateforme**
+            - Consultez les informations de la demande et les analyses déclarées.
+            - Affectez un opérateur à la demande et enregistrez son adresse e-mail.
+            - Ajoutez ou retirez des opérateurs du répertoire si nécessaire.
+            - Consultez l’état des documents et l’état des feuilles FAIR.
+            - Créez/vérifiez le classeur FAIR et utilisez l’action de demande de remplissage FAIR pour solliciter le demandeur.
+
+            **Décision / statut**
+            - Choisissez le statut approprié : en attente, acceptée ou refusée.
+            - Ajoutez un commentaire facultatif.
+            - Enregistrez la décision pour notifier le demandeur.
+            - Une décision laissée « en attente » ne constitue pas une acceptation.
+
+            **Analyse effectuée / Mise en facturation**
+            - Lorsque l’analyse est terminée, utilisez l’action de confirmation dédiée.
+            - Cette action signale au personnel administratif que le dossier peut passer à la facturation.
+
+            **Gestion partie administrative**
+            - Importez le devis non signé, ajoutez le commentaire destiné au demandeur et envoyez le devis avec la notification.
+            - Consultez la réception du devis signé transmis par le demandeur.
+            - Importez la facture et renseignez le montant réel facturé avant de confirmer l’enregistrement.
+
+            ## 5. Comprendre le suivi de l’avancement
+
+            Le suivi visuel présente les étapes principales :
+            1. **Décision** : demande en attente, acceptée ou refusée.
+            2. **Devis non signé** : devis transmis par la plateforme.
+            3. **Devis signé** : devis signé reçu.
+            4. **Bon de commande** : bon de commande reçu.
+            5. **Facturation** : facture enregistrée avec son montant réel.
+
+            Dans le tableau global, chaque ligne correspond à une demande. Utilisez les barres de défilement du tableau si la liste est longue ou si toutes les colonnes ne sont pas visibles.
+
+            **Code couleur :**
+            - Vert : étape réalisée.
+            - Orange : décision en attente.
+            - Rouge : demande refusée.
+            - Gris : étape non réalisée.
+
+            Le tableau global permet de comparer les demandes ; sélectionnez une demande dans la gestion des demandes pour consulter et modifier son dossier.
+
+            ## 6. Contact et assistance
+
+            **En cas de problème, de question ou de difficulté d’utilisation, contactez la plateforme OV-Chimie-Métabolisme.**
+
+            **E-mail : ov-chimie@inrae.fr**
+
+            Vous pouvez aussi ouvrir le menu **Contact** dans la barre latérale pour envoyer un message. Indiquez si possible :
+            - la référence complète de la demande ;
+            - le menu ou l’étape concernée ;
+            - le message d’erreur affiché ;
+            - une capture d’écran si elle aide à comprendre le problème.
+
+            N’envoyez pas de mot de passe ni d’information confidentielle dans votre message.
+            """
+        )
+    else:
+        st.markdown(
+            """
+            ## 1. Analysis request
+
+            Use this section to submit a new request to the platform.
+
+            **Step 1 – General information**
+            - Enter the requester’s first and last name.
+            - Enter the group or laboratory and its full address.
+            - Complete administrative contact details when the fields are displayed and relevant.
+            - Check the contact information before proceeding.
+
+            **Step 2 – Project**
+            - Enter the project name and the requested project information.
+            - Select the laboratory category that applies: **Non-public**, **Public** or **Public (IJPB)**, as offered by the form.
+            - Complete funding or support information when requested.
+
+            **Step 3 – Analysis type(s)**
+            - Select an analysis type from the list.
+            - Choose the injection or ionization mode when available (for example, Split/Splitless or ESI).
+            - Enter the number of samples for that analysis.
+            - If you need several services, use **Add another analysis type** and complete each analysis separately.
+            - Check the sample count and mode for every analysis.
+
+            **Step 4 – Additional information and documents**
+            - Complete the additional fields displayed in the form.
+            - Upload requested files when an upload field is provided.
+            - Read the platform charter and tick the required acceptance box before submission.
+
+            **Step 5 – Review and submit**
+            - Review the summary: contact details, laboratory, project, analyses and sample counts.
+            - Submit the request at the final step.
+            - Keep the **full request reference** shown or sent by email. You will need it for follow-up and document uploads.
+
+            ## 2. FAIR
+
+            The FAIR section provides access to the metadata workbook associated with a request. Available sheets are:
+            - **Sample**: sample information.
+            - **Analysis**: analysis information.
+            - **Data treatment**: data-treatment information.
+            - **Pipeline Step by Step**: description of pipeline steps.
+
+            **For requesters**
+            1. Open the required sheet.
+            2. Select the requester role when prompted.
+            3. Enter the full request reference and the email address used for the original request.
+            4. Validate access, complete the requested information and save it.
+
+            **For authorized staff**
+            - The administrator selects the relevant request and opens the available sheets.
+            - In Sample, authorized staff can also import administrator File IDs when needed.
+            - Preserve the workbook structure and existing sample identifiers.
+
+            If requester access is not yet available, contact the platform. The administrator must first request FAIR completion.
+
+            ## 3. Upload signed quotation and/or purchase order
+
+            Use this section to submit one or both documents for an existing request.
+
+            1. Enter the email address used for the original request.
+            2. Enter the **full request reference** (identifier, requester, project and laboratory).
+            3. Wait for the confirmation that the request has been recognized.
+            4. Upload the signed quotation, the purchase order, or both. At least one document must be submitted.
+            5. Add an optional comment to accompany the documents.
+            6. Click the upload button and wait for the confirmation message.
+
+            The documents are linked to the request and stored in the platform’s Nextcloud space. A confirmation email is sent to the requester and an internal notification is sent to the configured recipients.
+
+            **Important:** check each file name and its contents before uploading. If the email or reference is not recognized, check the information entered.
+
+            ## 4. Administrator – Request management
+
+            This section is restricted to authorized platform staff.
+
+            **Find a request**
+            - Search by project, requester or reference.
+            - Select the request from the list.
+            - Review its progress indicator and associated information.
+
+            **Platform management**
+            - Review request information and declared analyses.
+            - Assign an operator and save the operator’s email address.
+            - Add or remove operators from the directory when required.
+            - Review document status and FAIR sheet completion.
+            - Create/check the FAIR workbook and request FAIR completion from the requester.
+
+            **Decision / status**
+            - Select the appropriate status: pending, accepted or refused.
+            - Add an optional comment.
+            - Save the decision to notify the requester.
+            - A request left as pending has not been accepted.
+
+            **Analysis completed / Ready for invoicing**
+            - When the analysis is complete, use the dedicated confirmation action.
+            - This notifies administrative staff that the file can proceed to invoicing.
+
+            **Administrative management**
+            - Upload the unsigned quotation, add a comment for the requester and send the quotation notification.
+            - Check whether the signed quotation has been received from the requester.
+            - Upload the invoice and enter the actual invoiced amount before confirming the record.
+
+            ## 5. Understanding request progress
+
+            The progress indicator shows the main stages:
+            1. **Decision**: pending, accepted or refused.
+            2. **Unsigned quotation**: quotation sent by the platform.
+            3. **Signed quotation**: signed quotation received.
+            4. **Purchase order**: purchase order received.
+            5. **Invoicing**: invoice saved with its actual amount.
+
+            Each row in the global table represents one request. Use the table’s scrollbars when the list is long or when all columns are not visible.
+
+            **Colour key:**
+            - Green: stage completed.
+            - Orange: decision pending.
+            - Red: request refused.
+            - Grey: stage not completed.
+
+            The global table is for an overview. Select a request in request management to view or update its file.
+
+            ## 6. Contact and support
+
+            **If you have a question, encounter an error or need help, contact the OV-Chimie-Metabolisme platform.**
+
+            **Email: ov-chimie@inrae.fr**
+
+            You can also use the **Contact** menu in the sidebar. If possible, include:
+            - the full request reference;
+            - the menu or step where the issue occurred;
+            - the error message displayed;
+            - a screenshot if it helps explain the issue.
+
+            Do not send passwords or confidential information in your message.
+            """
+        )
+
+
 if st.query_params.get("fair_token"):
     try:
         fair_records = load_metadata()
